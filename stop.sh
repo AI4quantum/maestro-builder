@@ -36,59 +36,7 @@ cd "$SCRIPT_DIR"
 # Change to the parent directory (maestro root) for PID file access
 cd ..
 
-# Function to check if a process is running
-is_process_running() {
-    local pid=$1
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-        return 0  # Process is running
-    else
-        return 1  # Process is not running
-    fi
-}
 
-# Function to safely stop a process by PID
-stop_process_by_pid() {
-    local pid=$1
-    local service_name=$2
-    local port=$3
-    
-    if [ -n "$pid" ]; then
-        if is_process_running "$pid"; then
-            print_status "Stopping $service_name (PID: $pid)..."
-            
-            # Try graceful shutdown first
-            kill "$pid" 2>/dev/null || true
-            
-            # Wait for graceful shutdown
-            local wait_count=0
-            while is_process_running "$pid" && [ $wait_count -lt 10 ]; do
-                sleep 1
-                wait_count=$((wait_count + 1))
-            done
-            
-            # Force kill if still running
-            if is_process_running "$pid"; then
-                print_warning "$service_name didn't stop gracefully, forcing termination..."
-                kill -9 "$pid" 2>/dev/null || true
-                sleep 1
-            fi
-            
-            if is_process_running "$pid"; then
-                print_error "Failed to stop $service_name (PID: $pid)"
-                return 1
-            else
-                print_success "$service_name stopped successfully"
-                return 0
-            fi
-        else
-            print_warning "$service_name is not running (PID: $pid)"
-            return 0
-        fi
-    else
-        print_warning "Invalid PID for $service_name"
-        return 0
-    fi
-}
 
 # Function to check if a port is in use
 check_port() {
@@ -136,45 +84,10 @@ kill_process_by_port() {
 
 print_status "Stopping Maestro services..."
 
-# Read PIDs from .maestro-builder.pid file
-if [ -f ".maestro-builder.pid" ]; then
-    print_status "Reading PIDs from .maestro-builder.pid..."
-    
-    # Read all PIDs from the file
-    pids=()
-    while IFS= read -r pid; do
-        if [ -n "$pid" ]; then
-            pids+=("$pid")
-        fi
-    done < ".maestro-builder.pid"
-    
-    # Stop each process
-    for pid in "${pids[@]}"; do
-        if is_process_running "$pid"; then
-            # Try to determine service name based on port
-            if lsof -p "$pid" | grep -q ":8001"; then
-                service_name="API service"
-                port="8001"
-            elif lsof -p "$pid" | grep -q ":5173\|:5174"; then
-                service_name="Builder frontend"
-                port="5173/5174"
-            else
-                service_name="Unknown service"
-                port="unknown"
-            fi
-            
-            stop_process_by_pid "$pid" "$service_name" "$port"
-        fi
-    done
-    
-    # Remove the PID file after processing
-    rm -f ".maestro-builder.pid"
-    print_success "Removed .maestro-builder.pid file"
-else
-    print_warning ".maestro-builder.pid file not found, checking ports..."
-    kill_process_by_port 8001 "API service"
-    kill_process_by_port 5174 "Builder frontend"
-fi
+# Stop services by port (more reliable than PID files)
+kill_process_by_port 8001 "API service"
+kill_process_by_port 5174 "Builder frontend"
+kill_process_by_port 5173 "Builder frontend (alternative port)"
 
 # Final verification
 echo ""
