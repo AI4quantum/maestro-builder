@@ -52,7 +52,7 @@ wait_for_service() {
 
 # Warn if services are already running
 check_port 8001 && print_warning "API already running on port 8001"
-(check_port 5174 || check_port 5173) && print_warning "Builder frontend already running on port 5174 or 5173"
+(check_port 5174) && print_warning "Builder frontend already running on port 5174"
 
 ### ───────────── Start API ─────────────
 

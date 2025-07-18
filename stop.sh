@@ -87,7 +87,6 @@ print_status "Stopping Maestro services..."
 # Stop services by port (more reliable than PID files)
 kill_process_by_port 8001 "API service"
 kill_process_by_port 5174 "Builder frontend"
-kill_process_by_port 5173 "Builder frontend (alternative port)"
 
 # Final verification
 echo ""
@@ -101,8 +100,8 @@ if check_port 8001; then
     api_stopped=false
 fi
 
-if check_port 5174 || check_port 5173; then
-    print_error "Builder frontend is still running on port 5174 or 5173"
+if check_port 5174; then
+    print_error "Builder frontend is still running on port 5174"
     builder_stopped=false
 fi
 
