@@ -25,3 +25,6 @@ dist-ssr
 .vite/
 *.sln
 *.sw?
+
+# Ignore Maestro Builder PID file
+api/.maestro-builder.pid
