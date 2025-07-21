@@ -1,0 +1,40 @@
+name: Run Python Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+      - '**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r api/requirements.txt
+          pip install pytest requests
+          pip install git+https://github.com/AI4quantum/maestro.git@v0.3.0
+
+      - name: Check maestro CLI installation
+        run: |
+          source .venv/bin/activate
+          which maestro
+          maestro --version
+
+      - name: Run tests
+        run: |
+          source .venv/bin/activate
+          pytest tests/ 
