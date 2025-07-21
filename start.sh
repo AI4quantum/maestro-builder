@@ -54,6 +54,22 @@ wait_for_service() {
 check_port 8001 && print_warning "API already running on port 8001"
 (check_port 5174) && print_warning "Builder frontend already running on port 5174"
 
+# Mode selection for Maestro backend
+MODE=$1
+if [ "$MODE" = "workflow" ]; then
+  MAESTRO_CMD="maestro serve ./meta-agents-v2/workflow_file_generation/agents.yaml ./meta-agents-v2/workflow_file_generation/workflow.yaml"
+elif [ "$MODE" = "agents" ] || [ -z "$MODE" ]; then
+  MAESTRO_CMD="maestro serve ./meta-agents-v2/agents_file_generation/agents.yaml ./meta-agents-v2/agents_file_generation/workflow.yaml"
+else
+  echo "Usage: ./start.sh [agents|workflow]"
+  exit 1
+fi
+
+print_status "Starting Maestro backend: $MAESTRO_CMD"
+nohup $MAESTRO_CMD > logs/maestro.log 2>&1 &
+MAESTRO_PID=$!
+print_success "Maestro backend started with PID: $MAESTRO_PID"
+
 ### ───────────── Start API ─────────────
 
 print_status "Starting Maestro API service..."
