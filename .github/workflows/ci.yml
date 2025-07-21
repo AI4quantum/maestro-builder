@@ -27,6 +27,7 @@ jobs:
           pip install -r api/requirements.txt
           pip install pytest requests
           pip install git+https://github.com/AI4quantum/maestro.git@v0.3.0
+          pip install "beeai-framework[duckduckgo]"
 
       - name: Check maestro CLI installation
         run: |
