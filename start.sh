@@ -74,7 +74,7 @@ if [ ! -d ".venv" ]; then
     print_status "Creating Python virtual environment..."
     python3 -m venv .venv
     source .venv/bin/activate
-    pip install -r api/requirements.txt
+    pip install -r "$SCRIPT_DIR/api/requirements.txt"
 else
     print_status "Using existing virtual environment..."
     source .venv/bin/activate
@@ -83,7 +83,8 @@ fi
 mkdir -p storage
 
 print_status "Starting API server on http://localhost:8001"
-nohup bash -c "source /Users/gliu/Desktop/work/maestro-builder/.venv/bin/activate && python main.py" > "$SCRIPT_DIR/logs/api.log" 2>&1 &
+cd "$SCRIPT_DIR"
+PYTHONPATH="$SCRIPT_DIR" nohup bash -c "source /Users/gliu/Desktop/work/maestro-builder/.venv/bin/activate && python -m api.main" >> "$SCRIPT_DIR/logs/api.log" 2>&1 &
 
 print_success "API service started"
 

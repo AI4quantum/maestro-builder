@@ -28,3 +28,8 @@ dist-ssr
 
 # Ignore Maestro Builder PID file
 api/.maestro-builder.pid
+.env
+agents.db
+
+tests/__pycache__
+storage
