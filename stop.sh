@@ -129,4 +129,4 @@ if [ -f "logs/builder.log" ]; then
 fi
 
 echo ""
-echo "To start services again, run: cd builder && ./start.sh" 
+echo "To start services again, run: ./start.sh [agents|workflow]" 
