@@ -8,8 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from ai_agent import MaestroBuilderAgent
-from database import Database
+from api.ai_agent import MaestroBuilderAgent
+from api.database import Database
 import uuid
 import requests
 
