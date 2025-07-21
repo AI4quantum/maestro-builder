@@ -19,9 +19,7 @@ print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
-
-# Change to the parent directory (maestro root) for API access
-cd ..
+echo "Current working directory: $SCRIPT_DIR"
 
 mkdir -p logs
 
@@ -53,15 +51,15 @@ wait_for_service() {
 }
 
 # Warn if services are already running
-check_port 8000 && print_warning "API already running on port 8000"
-(check_port 5174 || check_port 5173) && print_warning "Builder frontend already running on port 5174 or 5173"
+check_port 8001 && print_warning "API already running on port 8001"
+(check_port 5174) && print_warning "Builder frontend already running on port 5174"
 
 ### ───────────── Start API ─────────────
 
 print_status "Starting Maestro API service..."
 
 if [ ! -d "api" ]; then
-    print_error "API directory not found. Make sure you're running this script from the builder directory."
+    print_error "API directory not found. Expected to be at ./api"
     exit 1
 fi
 
@@ -72,39 +70,33 @@ if ! command -v python3 &>/dev/null; then
     exit 1
 fi
 
-if [ ! -d "venv" ] && [ ! -d ".venv" ]; then
+if [ ! -d ".venv" ]; then
     print_status "Creating Python virtual environment..."
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r api/requirements.txt
 else
-    source venv/bin/activate 2>/dev/null || source .venv/bin/activate
+    print_status "Using existing virtual environment..."
+    source .venv/bin/activate
 fi
 
 mkdir -p storage
 
 print_status "Starting API server on http://localhost:8001"
-# nohup python main.py > ../logs/api.log 2>&1 &
+nohup bash -c "source /Users/gliu/Desktop/work/maestro-builder/.venv/bin/activate && python main.py" > "$SCRIPT_DIR/logs/api.log" 2>&1 &
 
-# TODO: FIX THIS
-nohup /Users/gliu/Desktop/work/maestro/.venv/bin/python main.py > ../logs/api.log 2>&1 &
-API_PID=$!
-echo $API_PID > .maestro-builder.pid
+print_success "API service started"
 
-print_success "API service started with PID: $API_PID"
-
-cd ..
+cd "$SCRIPT_DIR"
 
 ### ───────────── Start Builder ─────────────
 
 print_status "Starting Maestro Builder frontend..."
 
-if [ ! -d "builder" ]; then
-    print_error "Builder directory not found. Make sure you're running this script from the builder directory."
+if [ ! -f "index.html" ]; then
+    print_error "Expected to find Builder frontend at project root (index.html not found)"
     exit 1
 fi
-
-cd builder
 
 if ! command -v node &>/dev/null; then
     print_error "Node.js is required but not installed."
@@ -122,13 +114,9 @@ if [ ! -d "node_modules" ]; then
 fi
 
 print_status "Starting Builder frontend on http://localhost:5174"
-nohup npm run dev > ../logs/builder.log 2>&1 &
-BUILDER_PID=$!
-echo $BUILDER_PID >> ../.maestro-builder.pid
+nohup npm run dev > "$SCRIPT_DIR/logs/builder.log" 2>&1 &
 
-print_success "Builder frontend started with PID: $BUILDER_PID"
-
-cd ..
+print_success "Builder frontend started"
 
 ### ───────────── Wait for Services ─────────────
 
@@ -163,4 +151,4 @@ echo "  - API: logs/api.log"
 echo "  - Builder: logs/builder.log"
 echo ""
 echo "To stop all services, run: ./stop.sh"
-echo "To view logs: tail -f logs/api.log | logs/builder.log"
+echo "To view logs: tail -f logs/api.log | tail -f logs/builder.log"
