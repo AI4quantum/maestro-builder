@@ -261,29 +261,45 @@ function App() {
 
   // Handler for editing YAML
   const handleEditYaml = async (instruction: string) => {
-    console.log('handleEditYaml called with instruction:', instruction);
-    const currentYamlFile = getCurrentYamlFile()
-    if (!currentYamlFile) return
-    setIsLoading(true)
+    const currentYamlFile = getCurrentYamlFile();
+    if (!currentYamlFile) return;
+    setIsLoading(true);
+    // Add the edit instruction as a user message
+    const userEditMessage = {
+      id: Date.now().toString(),
+      role: 'user' as 'user',
+      content: `[Edit YAML] ${instruction}`,
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, userEditMessage]);
+
     try {
       const response = await axios.post('/api/edit_yaml', {
         yaml: currentYamlFile.content,
         instruction,
         file_type: currentYamlFile.name.includes('workflow') ? 'workflow' : 'agents',
-      })
-      const editedYaml = response.data.edited_yaml
+      });
+      const editedYaml = response.data.edited_yaml;
+      // Add the editing agent's response as an assistant message
+      const assistantEditMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant' as 'assistant',
+        content: editedYaml,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, assistantEditMessage]);
+
       setYamlFiles(yamlFiles.map(f =>
         f.name === currentYamlFile.name
           ? { ...f, content: editedYaml }
           : f
-      ))
+      ));
     } catch (error) {
-      console.error('Error editing YAML:', error)
-      // Optionally show error to user
+      console.error('Error editing YAML:', error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="h-screen flex bg-white overflow-hidden">
