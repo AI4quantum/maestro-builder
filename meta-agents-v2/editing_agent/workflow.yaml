@@ -1,0 +1,17 @@
+apiVersion: maestro/v1alpha1
+kind: Workflow
+metadata:
+  name: meta-agents-v2
+  labels:
+    app: meta-agents-v2
+spec:
+  template:
+    metadata:
+      labels:
+        app: meta-agents-v2
+    agents:
+      - EditingAgent
+    prompt: holder
+    steps:
+    - name: step1
+      agent: EditingAgent
