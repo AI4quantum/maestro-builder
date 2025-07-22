@@ -87,6 +87,7 @@ print_status "Stopping Maestro services..."
 # Stop services by port (more reliable than PID files)
 kill_process_by_port 8001 "API service"
 kill_process_by_port 5174 "Builder frontend"
+kill_process_by_port 8000 "Maestro backend"
 
 # Final verification
 echo ""
@@ -94,6 +95,7 @@ print_status "Verifying services are stopped..."
 
 api_stopped=true
 builder_stopped=true
+maestro_stopped=true
 
 if check_port 8001; then
     print_error "API service is still running on port 8001"
@@ -105,7 +107,12 @@ if check_port 5174; then
     builder_stopped=false
 fi
 
-if [ "$api_stopped" = true ] && [ "$builder_stopped" = true ]; then
+if check_port 8000; then
+    print_error "Maestro backend is still running on port 8000"
+    maestro_stopped=false
+fi
+
+if [ "$api_stopped" = true ] && [ "$builder_stopped" = true ] && [ "$maestro_stopped" = true ]; then
     print_success "All Maestro services have been stopped successfully!"
 else
     print_error "Some services may still be running. You may need to manually stop them."
@@ -122,4 +129,4 @@ if [ -f "logs/builder.log" ]; then
 fi
 
 echo ""
-echo "To start services again, run: cd builder && ./start.sh" 
+echo "To start services again, run: ./start.sh [agents|workflow]" 
