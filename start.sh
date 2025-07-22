@@ -5,12 +5,6 @@
 
 set -e
 
-# Check if Python virtual environment is active
-if [ -z "$VIRTUAL_ENV" ]; then
-    echo -e "${RED}[ERROR]${NC} Python virtual environment is not active. Please activate it with 'source .venv/bin/activate' before running this script."
-    exit 1
-fi
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
