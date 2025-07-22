@@ -138,7 +138,7 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
         <div className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-xs text-blue-700 font-medium">
           Showing changes (green = added, red = removed)
         </div>
-        <div className="text-sm font-mono px-4 py-2 overflow-y-auto h-[500px] bg-white font-['Courier_New'] whitespace-pre">
+        <div className="text-sm font-mono px-4 py-2 overflow-y-auto flex-1 min-h-0 bg-white font-['Courier_New'] whitespace-pre">
           {lines.map((line, idx) => {
             const lineStyle = line.type === 'insert'
               ? { backgroundColor: '#dcfce7', color: '#166534' } // green-100 bg, green-800 text
@@ -164,7 +164,7 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
   const hasContent = filesToShow.some(file => file.content.trim() !== '')
 
   return (
-    <div className="w-1/3 border-l border-gray-100 bg-white flex flex-col">
+    <div className="w-1/3 h-full border-l border-gray-100 bg-white flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b border-gray-100">
         <h2 className="text-lg font-semibold text-gray-900">Generated Files</h2>
