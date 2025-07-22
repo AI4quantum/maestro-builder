@@ -4,6 +4,7 @@ import { ChatCanvas } from './components/ChatCanvas'
 import { YamlPanel } from './components/YamlPanel'
 import { ChatInput } from './components/ChatInput'
 import { apiService, type ChatSession, type ChatHistory } from './services/api'
+import axios from 'axios'
 
 export interface Message {
   id: string
@@ -252,6 +253,38 @@ function App() {
     }
   }
 
+  // Helper to get the currently active YAML file (default to agents.yaml)
+  const getCurrentYamlFile = () => {
+    // For now, just use agents.yaml (can be improved to track active tab)
+    return yamlFiles.find(f => f.name === 'agents.yaml') || yamlFiles[0]
+  }
+
+  // Handler for editing YAML
+  const handleEditYaml = async (instruction: string) => {
+    console.log('handleEditYaml called with instruction:', instruction);
+    const currentYamlFile = getCurrentYamlFile()
+    if (!currentYamlFile) return
+    setIsLoading(true)
+    try {
+      const response = await axios.post('/api/edit_yaml', {
+        yaml: currentYamlFile.content,
+        instruction,
+        file_type: currentYamlFile.name.includes('workflow') ? 'workflow' : 'agents',
+      })
+      const editedYaml = response.data.edited_yaml
+      setYamlFiles(yamlFiles.map(f =>
+        f.name === currentYamlFile.name
+          ? { ...f, content: editedYaml }
+          : f
+      ))
+    } catch (error) {
+      console.error('Error editing YAML:', error)
+      // Optionally show error to user
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="h-screen flex bg-white overflow-hidden">
       {/* Left Sidebar */}
@@ -271,7 +304,7 @@ function App() {
         </div>
         {/* Chat Input */}
         <div className="border-t border-gray-100 p-6 shrink-0">
-          <ChatInput onSendMessage={handleSendMessage} disabled={isLoading} />
+          <ChatInput onSendMessage={handleSendMessage} onEditYaml={handleEditYaml} disabled={isLoading} />
         </div>
       </div>
 
