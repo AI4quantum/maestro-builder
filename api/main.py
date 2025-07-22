@@ -74,6 +74,14 @@ class ChatSession(BaseModel):
     yaml_files: Dict[str, str]
 
 
+class EditYamlRequest(BaseModel):
+    yaml: str
+    instruction: str
+    file_type: str  # 'agents' or 'workflow'
+
+class EditYamlResponse(BaseModel):
+    edited_yaml: str
+
 # ---------------------------------------
 # Routes
 # ---------------------------------------
@@ -242,6 +250,30 @@ async def delete_chat_session(chat_id: str):
         raise HTTPException(
             status_code=500, detail=f"Error deleting chat session: {str(e)}"
         )
+
+
+@app.post("/api/edit_yaml", response_model=EditYamlResponse)
+async def edit_yaml(request: EditYamlRequest):
+    try:
+        # Build the prompt for the editing agent
+        prompt = f"Current YAML file (type: {request.file_type}):\n{request.yaml}\n\nUser instruction: {request.instruction}\n\nPlease apply the requested edit and return only the updated YAML file."
+        resp = requests.post(
+            "http://localhost:8002/chat",
+            json={"prompt": prompt},
+        )
+        if resp.status_code != 200:
+            raise Exception(resp.text)
+        edited_yaml = resp.json().get("response", "")
+        # Remove markdown formatting if present
+        if "```yaml" in edited_yaml:
+            edited_yaml = (
+                edited_yaml.split("```yaml", 1)[-1].split("```", 1)[0].strip()
+            )
+        elif "```" in edited_yaml:
+            edited_yaml = edited_yaml.split("```", 1)[-1].split("```", 1)[0].strip()
+        return {"edited_yaml": edited_yaml}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Editing Agent failed: {e}")
 
 
 @app.get("/api/health")
