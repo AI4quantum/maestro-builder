@@ -88,6 +88,7 @@ print_status "Stopping Maestro services..."
 kill_process_by_port 8001 "API service"
 kill_process_by_port 5174 "Builder frontend"
 kill_process_by_port 8000 "Maestro backend"
+kill_process_by_port 8002 "Editing Agent backend"
 
 # Final verification
 echo ""
@@ -96,6 +97,7 @@ print_status "Verifying services are stopped..."
 api_stopped=true
 builder_stopped=true
 maestro_stopped=true
+editing_agent_stopped=true
 
 if check_port 8001; then
     print_error "API service is still running on port 8001"
@@ -112,7 +114,12 @@ if check_port 8000; then
     maestro_stopped=false
 fi
 
-if [ "$api_stopped" = true ] && [ "$builder_stopped" = true ] && [ "$maestro_stopped" = true ]; then
+if check_port 8002; then
+    print_error "Editing Agent backend is still running on port 8002"
+    editing_agent_stopped=false
+fi
+
+if [ "$api_stopped" = true ] && [ "$builder_stopped" = true ] && [ "$maestro_stopped" = true ] && [ "$editing_agent_stopped" = true ]; then
     print_success "All Maestro services have been stopped successfully!"
 else
     print_error "Some services may still be running. You may need to manually stop them."
