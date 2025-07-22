@@ -7,10 +7,40 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Node/Frontend
 node_modules
 dist
 dist-ssr
 *.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
 
 # Editor directories and files
 .vscode/*
@@ -20,17 +50,30 @@ dist-ssr
 *.suo
 *.ntvs*
 *.njsproj
+*.swp
+*.swo
+*~
 
 # Vite
 .vite/
 *.sln
-*.sw?
+
+# Storage (chat sessions and history)
+storage/
+*.json
 
 # Ignore Maestro Builder PID file
 api/.maestro-builder.pid
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 agents.db
 
-tests/__pycache__
-storage
-.venv/
+# OS
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
