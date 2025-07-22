@@ -17,7 +17,7 @@ A modern web-based interface for building Maestro agents and workflows using AI 
      ```bash
      python3 --version
      ```
-   - Create and activate the virtual environment:
+   - Create and activate the virtual environment (must be at the top level of the project):
      ```bash
      python3 -m venv .venv
      source .venv/bin/activate
