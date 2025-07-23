@@ -27,7 +27,12 @@ A modern web-based interface for building Maestro agents and workflows using AI 
      pip install -r api/requirements.txt
      ```
 
-3. **Start everything with one command:**
+3. **Install frontend dependencies:**
+   ```bash
+   npm install
+   ```
+
+4. **Start everything with one command:**
    ```bash
    ./start.sh [agents|workflow]
    ```
