@@ -86,21 +86,27 @@ if ! command -v python3 &>/dev/null; then
     exit 1
 fi
 
-if [ ! -d ".venv" ]; then
-    print_status "Creating Python virtual environment..."
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install -r "$SCRIPT_DIR/api/requirements.txt"
+# Check if Python virtual environment is active
+if [ -z "$VIRTUAL_ENV" ]; then
+    echo -e "${RED}[ERROR]${NC} Python virtual environment is not active. Please activate it with 'source .venv/bin/activate' before running this script."
+    exit 1
+fi
+
+REQUIREMENTS_FILE="$SCRIPT_DIR/api/requirements.txt"
+VENV_DIR="$SCRIPT_DIR/.venv"
+REQUIREMENTS_MARKER="$VENV_DIR/.requirements_installed"
+
+if [ ! -d "$VENV_DIR" ]; then
+    print_error "Python virtual environment not found at $VENV_DIR. Please create it and install dependencies before running this script."
+    exit 1
 else
-    print_status "Using existing virtual environment..."
-    source .venv/bin/activate
+    print_status "Using existing virtual environment at $VENV_DIR..."
+    source "$VENV_DIR/bin/activate"
 fi
 
 mkdir -p storage
 
-print_status "Starting API server on http://localhost:8001"
-cd "$SCRIPT_DIR"
-PYTHONPATH="$SCRIPT_DIR" nohup bash -c "source /Users/gliu/Desktop/work/maestro-builder/.venv/bin/activate && python -m api.main" >> "$SCRIPT_DIR/logs/api.log" 2>&1 &
+PYTHONPATH="$SCRIPT_DIR" nohup bash -c "source \"$VENV_DIR/bin/activate\" && python -m api.main" >> "$SCRIPT_DIR/logs/api.log" 2>&1 &
 
 print_success "API service started"
 
