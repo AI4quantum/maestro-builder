@@ -13,7 +13,7 @@ A modern web-based interface for building Maestro agents and workflows using AI 
    ```
 
 2. **Set up your Python virtual environment:**
-   - Make sure you have Python 3.11 or higher installed:
+   - Make sure you have Python 3.11:
      ```bash
      python3 --version
      ```
