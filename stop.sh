@@ -28,6 +28,13 @@ SERVICES=(
   "builder:logs/builder.pid"
 )
 
+CLEAR_LOGS=false
+for arg in "$@"; do
+  if [[ "$arg" == "--clear-logs" || "$arg" == "-c" ]]; then
+    CLEAR_LOGS=true
+  fi
+done
+
 print_status "Stopping Maestro services using PID files..."
 
 all_stopped=true
@@ -71,6 +78,17 @@ if [ "$all_stopped" = true ]; then
 else
   print_error "Some services may still be running. You may need to manually stop them."
   exit 1
+fi
+
+if [ "$CLEAR_LOGS" = true ]; then
+  print_status "Clearing all log files..."
+  > logs/api.log
+  > logs/builder.log
+  > logs/maestro_agents.log
+  > logs/maestro_workflow.log
+  > logs/editing_agent.log
+  > logs/maestro.log
+  print_success "All log files have been cleared."
 fi
 
 # Clean up log files if they exist
