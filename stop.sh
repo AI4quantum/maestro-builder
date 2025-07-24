@@ -60,6 +60,10 @@ for entry in "${SERVICES[@]}"; do
   fi
 done
 
+# Kill any orphaned Vite/Node processes
+print_status "Killing any orphaned Vite/Node processes..."
+pkill -f 'node.*vite' || true
+print_success "Orphaned Vite/Node processes (if any) have been killed."
 
 echo ""
 if [ "$all_stopped" = true ]; then
