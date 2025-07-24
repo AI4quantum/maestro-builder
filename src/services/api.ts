@@ -83,6 +83,64 @@ class ApiService {
     }
   }
 
+  async sendAgentMessage(message: string, chatId?: string): Promise<ChatResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chat_builder_agent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: message,
+          role: 'user',
+          chat_id: chatId || this.currentChatId
+        } as ChatMessage & { chat_id?: string })
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data: ChatResponse = await response.json()
+      this.currentChatId = data.chat_id
+      data.yaml_files = data.yaml_files.map(file => ({
+        ...file,
+        content: this.formatYamlContent(file.content)
+      }))
+      return data
+    } catch (error) {
+      console.error('Error sending agent message:', error)
+      return this.getFallbackResponse(message)
+    }
+  }
+
+  async sendWorkflowMessage(message: string, chatId?: string): Promise<ChatResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chat_builder_workflow`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: message,
+          role: 'user',
+          chat_id: chatId || this.currentChatId
+        } as ChatMessage & { chat_id?: string })
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data: ChatResponse = await response.json()
+      this.currentChatId = data.chat_id
+      data.yaml_files = data.yaml_files.map(file => ({
+        ...file,
+        content: this.formatYamlContent(file.content)
+      }))
+      return data
+    } catch (error) {
+      console.error('Error sending workflow message:', error)
+      return this.getFallbackResponse(message)
+    }
+  }
+
   async getYamlFiles(chatId: string): Promise<YamlFile[]> {
     try {
       const response = await fetch(`${API_BASE_URL}/api/get_yamls/${chatId}`)

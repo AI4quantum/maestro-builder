@@ -43,6 +43,7 @@ db = Database()
 class ChatMessage(BaseModel):
     content: str
     role: str = "user"
+    chat_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -96,7 +97,7 @@ async def root():
 async def chat_builder_agent(message: ChatMessage):
     try:
         resp = requests.post(
-            "http://localhost:8000/chat",
+            "http://localhost:8003/chat",
             json={"prompt": message.content, "agent": "TaskInterpreter"},
         )
         if resp.status_code != 200:
@@ -123,25 +124,26 @@ async def chat_builder_agent(message: ChatMessage):
 @app.post("/api/chat_builder_workflow", response_model=ChatResponse)
 async def chat_builder_workflow(message: ChatMessage):
     try:
-        payload = {
-            "prompt": message.content,
-            "agent": "WorkflowYAMLBuilder",
-        }
-        if message.chat_id:
-            payload["chat_id"] = message.chat_id
-        resp = requests.post("http://localhost:8000/chat", json=payload)
-
+        resp = requests.post(
+            "http://localhost:8004/chat",
+            json={"prompt": message.content, "agent": "WorkflowYAMLBuilder"},
+        )
         if resp.status_code != 200:
             raise Exception(resp.text)
 
-        response_json = resp.json()
-        workflow_yaml = response_json.get("response", "")
-        chat_id = response_json.get("chat_id")
+        full_output = resp.json().get("response", "")
+        extracted_yaml = ""
+        if "```yaml" in full_output:
+            extracted_yaml = (
+                full_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
+            )
+        elif "```" in full_output:
+            extracted_yaml = full_output.split("```", 1)[-1].split("```", 1)[0].strip()
 
         return {
-            "response": workflow_yaml,
-            "chat_id": chat_id,
-            "yaml_files": [{"name": "workflow.yaml", "content": workflow_yaml}],
+            "response": full_output,
+            "yaml_files": [{"name": "workflow.yaml", "content": extracted_yaml}],
+            "chat_id": str(uuid.uuid4()),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Workflow Builder failed: {e}")
