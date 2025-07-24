@@ -47,18 +47,18 @@ export function Sidebar({ chatHistory, currentChatId, onLoadChat, onCreateChat, 
   return (
     <>
     <div className={cn(
-      "h-full border-r border-gray-100 bg-white transition-all duration-300 flex-shrink-0",
-      isCollapsed ? "w-16" : "w-64"
+      "h-full border-r border-gray-100 bg-white/80 backdrop-blur-md shadow-xl transition-all duration-300 flex-shrink-0 font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]",
+      isCollapsed ? "w-16" : "w-72"
     )}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-100">
+      <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-white/60 backdrop-blur-md rounded-t-2xl">
         {!isCollapsed && (
-          <h2 className="text-sm font-semibold text-gray-900">Chat History</h2>
+          <h2 className="text-sm font-semibold text-gray-900 tracking-wide">Chat History</h2>
         )}
         <div className="flex items-center gap-1">
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-2 rounded-lg hover:bg-gray-50 transition-colors"
+            className="p-2 rounded-xl hover:bg-blue-100 transition-colors shadow-sm"
             title={isCollapsed ? "Expand menu" : "Collapse menu"}
           >
             {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
@@ -66,7 +66,7 @@ export function Sidebar({ chatHistory, currentChatId, onLoadChat, onCreateChat, 
           {!isCollapsed && chatHistory.length > 0 && (
             <button
               onClick={() => setShowDeleteAllConfirm(true)}
-              className="p-2 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"
+              className="p-2 rounded-xl hover:bg-red-100 hover:text-red-600 transition-colors shadow-sm"
               title="Delete all chats"
             >
               <Trash2 size={16} />
@@ -76,15 +76,15 @@ export function Sidebar({ chatHistory, currentChatId, onLoadChat, onCreateChat, 
       </div>
 
       {/* New Chat Button */}
-      <div className="p-3 border-b border-gray-100">
+      <div className="p-3 border-b border-gray-100 bg-white/60 backdrop-blur-md">
         <button
           onClick={onCreateChat}
           className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 text-xs rounded-lg transition-all duration-200",
-            "bg-blue-600 text-white hover:bg-blue-700 font-medium"
+            "w-full flex items-center gap-3 px-4 py-3 text-sm rounded-full transition-all duration-200 shadow-md",
+            "bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600 font-semibold tracking-wide"
           )}
         >
-          <Plus size={16} />
+          <Plus size={18} />
           {!isCollapsed && <span className="truncate">New Chat</span>}
         </button>
       </div>
@@ -100,33 +100,33 @@ export function Sidebar({ chatHistory, currentChatId, onLoadChat, onCreateChat, 
               )}
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-2">
               {chatHistory.map((chat) => (
                 <div
                   key={chat.id}
                   className={cn(
-                    "group relative rounded-lg transition-all duration-200",
-                    currentChatId === chat.id ? "bg-blue-50" : "hover:bg-gray-50"
+                    "group relative rounded-xl transition-all duration-200 shadow-sm",
+                    currentChatId === chat.id ? "bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-300" : "hover:bg-gray-50 border border-transparent"
                   )}
                 >
                   <button
                     onClick={() => onLoadChat(chat.id)}
                     className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2.5 text-xs transition-all duration-200 text-left",
+                      "w-full flex items-center gap-3 px-4 py-3 text-sm transition-all duration-200 text-left rounded-xl",
                       currentChatId === chat.id
-                        ? "text-blue-700 font-medium"
-                        : "text-gray-600 hover:text-gray-900"
+                        ? "text-blue-800 font-semibold"
+                        : "text-gray-700 hover:text-gray-900"
                     )}
                   >
-                    <MessageSquare size={16} />
+                    <MessageSquare size={18} />
                     {!isCollapsed && (
                       <div className="flex-1 min-w-0">
-                        <div className="truncate font-medium">{chat.name}</div>
+                        <div className="truncate font-semibold">{chat.name}</div>
                         <div className="truncate text-gray-500">
                           {truncateText(chat.last_message, 30)}
                         </div>
                         <div className="text-gray-400 text-xs">
-                          {formatDate(chat.created_at)} • {chat.message_count} messages
+                          {formatDate(chat.created_at)} 2 {chat.message_count} messages
                         </div>
                       </div>
                     )}
@@ -139,7 +139,7 @@ export function Sidebar({ chatHistory, currentChatId, onLoadChat, onCreateChat, 
                         e.stopPropagation()
                         onDeleteChat(chat.id)
                       }}
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-600 hover:bg-red-50"
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-600 hover:bg-red-100"
                       title="Delete chat"
                     >
                       <Trash2 size={14} />
@@ -153,14 +153,14 @@ export function Sidebar({ chatHistory, currentChatId, onLoadChat, onCreateChat, 
       </div>
 
       {/* Footer */}
-      <div className="p-3 border-t border-gray-100">
+      <div className="p-3 border-t border-gray-100 bg-white/60 backdrop-blur-md rounded-b-2xl">
         <button
           className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 text-xs rounded-lg transition-all duration-200",
-            "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            "w-full flex items-center gap-3 px-4 py-3 text-sm rounded-full transition-all duration-200 shadow-sm",
+            "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
           )}
         >
-          <Settings size={16} />
+          <Settings size={18} />
           {!isCollapsed && <span className="truncate">Settings</span>}
         </button>
       </div>
