@@ -43,22 +43,23 @@ for entry in "${SERVICES[@]}"; do
       if kill -0 "$pid" 2>/dev/null; then
         print_error "$name (PID $pid) did not stop. Killing forcefully."
         kill -9 "$pid" 2>/dev/null || true
+        sleep 1
       fi
-      if kill -0 "$pid" 2>/dev/null; then
-        print_error "$name (PID $pid) is still running!"
-        all_stopped=false
-      else
-        print_success "$name stopped."
-        rm -f "$pidfile"
-      fi
-    else
-      print_warning "$name PID file found but process $pid is not running. Removing PID file."
-      rm -f "$pidfile"
     fi
+    
+    if kill -0 "$pid" 2>/dev/null; then
+      print_error "$name (PID $pid) is still running!"
+      all_stopped=false
+    else
+      print_success "$name stopped."
+    fi
+    rm -f "$pidfile"
+
   else
     print_success "$name is not running (no PID file)."
   fi
 done
+
 
 echo ""
 if [ "$all_stopped" = true ]; then
