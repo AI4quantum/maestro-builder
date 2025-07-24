@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# Maestro Stop Script (PID-based)
-# Safely stops all Maestro services using PID files
-
-set -e
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -20,13 +15,15 @@ print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-SERVICES=(
-  "maestro_agents:logs/maestro_agents.pid"
-  "maestro_workflow:logs/maestro_workflow.pid"
-  "editing_agent:logs/editing_agent.pid"
-  "api:logs/api.pid"
-  "builder:logs/builder.pid"
+# Define all relevant PID files and ports
+PID_FILES=(
+  "logs/maestro_agents.pid"
+  "logs/maestro_workflow.pid"
+  "logs/editing_agent.pid"
+  "logs/api.pid"
+  "logs/builder.pid"
 )
+PORTS=(8000 8001 8002 8003 8004 5174)
 
 CLEAR_LOGS=false
 for arg in "$@"; do
@@ -35,50 +32,48 @@ for arg in "$@"; do
   fi
 done
 
-print_status "Stopping Maestro services using PID files..."
+print_status "Stopping Maestro services..."
 
-all_stopped=true
-for entry in "${SERVICES[@]}"; do
-  name="${entry%%:*}"
-  pidfile="${entry#*:}"
+# 1. Kill by PID (if PID file exists)
+for pidfile in "${PID_FILES[@]}"; do
   if [ -f "$pidfile" ]; then
     pid=$(cat "$pidfile")
     if kill -0 "$pid" 2>/dev/null; then
-      print_status "Stopping $name (PID $pid)..."
+      print_status "Killing process with PID $pid from $pidfile..."
       kill "$pid" 2>/dev/null || true
       sleep 2
       if kill -0 "$pid" 2>/dev/null; then
-        print_error "$name (PID $pid) did not stop. Killing forcefully."
+        print_warning "PID $pid did not stop, force killing..."
         kill -9 "$pid" 2>/dev/null || true
         sleep 1
       fi
     fi
-    
-    if kill -0 "$pid" 2>/dev/null; then
-      print_error "$name (PID $pid) is still running!"
-      all_stopped=false
-    else
-      print_success "$name stopped."
-    fi
     rm -f "$pidfile"
-
+    print_success "Removed $pidfile."
   else
-    print_success "$name is not running (no PID file)."
+    print_status "$pidfile does not exist."
   fi
 done
 
-# Kill any orphaned Vite/Node processes
-print_status "Killing any orphaned Vite/Node processes..."
-pkill -f 'node.*vite' || true
-print_success "Orphaned Vite/Node processes (if any) have been killed."
+# 2. Kill any process listening on relevant ports
+for port in "${PORTS[@]}"; do
+  pids=$(lsof -ti :$port || true)
+  if [ -n "$pids" ]; then
+    print_status "Killing processes on port $port (PIDs: $pids)..."
+    kill -9 $pids 2>/dev/null || true
+    print_success "Killed processes on port $port."
+  else
+    print_success "No processes found on port $port."
+  fi
+done
 
-echo ""
-if [ "$all_stopped" = true ]; then
-  print_success "All Maestro services have been stopped successfully!"
-else
-  print_error "Some services may still be running. You may need to manually stop them."
-  exit 1
-fi
+
+ports_in_use=()
+for port in "${PORTS[@]}"; do
+  if lsof -i :$port | grep LISTEN >/dev/null 2>&1; then
+    ports_in_use+=("$port")
+  fi
+done
 
 if [ "$CLEAR_LOGS" = true ]; then
   print_status "Clearing all log files..."
@@ -91,26 +86,11 @@ if [ "$CLEAR_LOGS" = true ]; then
   print_success "All log files have been cleared."
 fi
 
-# Clean up log files if they exist
-if [ -f "logs/api.log" ]; then
-    print_status "API logs are available at: logs/api.log"
-fi
-
-if [ -f "logs/builder.log" ]; then
-    print_status "Builder logs are available at: logs/builder.log"
-fi
-
-if [ -f "logs/maestro_agents.log" ]; then
-    print_status "Agent Generation logs are available at: logs/maestro_agents.log"
-fi
-
-if [ -f "logs/maestro_workflow.log" ]; then
-    print_status "Workflow Generation logs are available at: logs/maestro_workflow.log"
-fi
-
-if [ -f "logs/editing_agent.log" ]; then
-    print_status "Editing Agent logs are available at: logs/editing_agent.log"
-fi
-
-echo ""
-echo "To start services again, run: ./start.sh" 
+if [ ${#ports_in_use[@]} -eq 0 ]; then
+  print_success "All Maestro services have been stopped and all relevant ports are free!"
+  exit 0
+else
+  print_error "Some ports are still in use: ${ports_in_use[*]}"
+  print_error "You may need to manually investigate and stop these processes."
+  exit 1
+fi 
