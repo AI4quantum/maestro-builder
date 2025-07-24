@@ -59,6 +59,7 @@ AGENTS_CMD="maestro serve ./meta-agents-v2/agents_file_generation/agents.yaml ./
 print_status "Starting Maestro Agent Generation backend: $AGENTS_CMD"
 nohup $AGENTS_CMD > logs/maestro_agents.log 2>&1 &
 AGENTS_PID=$!
+echo $AGENTS_PID > logs/maestro_agents.pid
 print_success "Maestro Agent Generation backend started with PID: $AGENTS_PID (port 8003)"
 
 # Start Maestro Workflow Generation backend (port 8004)
@@ -66,6 +67,7 @@ WORKFLOW_CMD="maestro serve ./meta-agents-v2/workflow_file_generation/agents.yam
 print_status "Starting Maestro Workflow Generation backend: $WORKFLOW_CMD"
 nohup $WORKFLOW_CMD > logs/maestro_workflow.log 2>&1 &
 WORKFLOW_PID=$!
+echo $WORKFLOW_PID > logs/maestro_workflow.pid
 print_success "Maestro Workflow Generation backend started with PID: $WORKFLOW_PID (port 8004)"
 
 # Start Editing Agent backend (port 8002)
@@ -73,6 +75,7 @@ EDITING_AGENT_CMD="maestro serve ./meta-agents-v2/editing_agent/agents.yaml ./me
 print_status "Starting Editing Agent backend: $EDITING_AGENT_CMD"
 nohup $EDITING_AGENT_CMD > logs/editing_agent.log 2>&1 &
 EDITING_AGENT_PID=$!
+echo $EDITING_AGENT_PID > logs/editing_agent.pid
 print_success "Editing Agent backend started with PID: $EDITING_AGENT_PID (port 8002)"
 
 ### ───────────── Start API ─────────────
@@ -112,6 +115,8 @@ fi
 mkdir -p storage
 
 PYTHONPATH="$SCRIPT_DIR" nohup bash -c "source \"$VENV_DIR/bin/activate\" && python -m api.main" >> "$SCRIPT_DIR/logs/api.log" 2>&1 &
+API_PID=$!
+echo $API_PID > "$SCRIPT_DIR/logs/api.pid"
 
 print_success "API service started"
 
@@ -143,6 +148,8 @@ fi
 
 print_status "Starting Builder frontend on http://localhost:5174"
 nohup npm run dev > "$SCRIPT_DIR/logs/builder.log" 2>&1 &
+BUILDER_PID=$!
+echo $BUILDER_PID > "$SCRIPT_DIR/logs/builder.pid"
 
 print_success "Builder frontend started"
 
