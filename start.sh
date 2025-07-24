@@ -78,13 +78,6 @@ EDITING_AGENT_PID=$!
 echo $EDITING_AGENT_PID > logs/editing_agent.pid
 print_success "Editing Agent backend started with PID: $EDITING_AGENT_PID (port 8002)"
 
-# Start Editing Agent Server (for YAML edits)
-EDITING_AGENT_CMD="maestro serve ./meta-agents-v2/editing_agent/agents.yaml ./meta-agents-v2/editing_agent/workflow.yaml --port 8002"
-print_status "Starting Editing Agent backend: $EDITING_AGENT_CMD"
-nohup $EDITING_AGENT_CMD > logs/editing_agent.log 2>&1 &
-EDITING_AGENT_PID=$!
-print_success "Editing Agent backend started with PID: $EDITING_AGENT_PID (port 8002)"
-
 ### ───────────── Start API ─────────────
 
 print_status "Starting Maestro API service..."
