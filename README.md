@@ -24,12 +24,12 @@ A modern web-based interface for building Maestro agents and workflows using AI 
      ```
    - Install required dependencies:
      ```bash
-     pip install -r api/requirements.txt
+     uv run pip install -r api/requirements.txt
      ```
 
 3. **Install frontend dependencies:**
    ```bash
-   npm install
+   uv run npm install
    ```
 
 4. **Start everything with one command:**
