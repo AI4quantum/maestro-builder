@@ -22,7 +22,7 @@ A modern web-based interface for building Maestro agents and workflows using AI 
      python3 -m venv .venv
      source .venv/bin/activate
      ```
-   - Install required dependencies (this will install everything, including Maestro and DuckDuckGo):
+   - Install required dependencies:
      ```bash
      pip install -r api/requirements.txt
      ```
@@ -34,5 +34,24 @@ A modern web-based interface for building Maestro agents and workflows using AI 
 
 4. **Start everything with one command:**
    ```bash
-   ./start.sh [agents|workflow]
+   ./start.sh
    ```
+
+This will start:
+- API backend (http://localhost:8001)
+- Builder frontend (http://localhost:5174)
+- Editing Agent backend (http://localhost:8002)
+- Agent Generation backend (http://localhost:8003)
+- Workflow Generation backend (http://localhost:8004)
+
+To stop all services, run:
+```bash
+./stop.sh
+```
+
+Log files:
+- API: logs/api.log
+- Builder: logs/builder.log
+- Editing Agent: logs/editing_agent.log
+- Agent Generation: logs/maestro_agents.log
+- Workflow Generation: logs/maestro_workflow.log

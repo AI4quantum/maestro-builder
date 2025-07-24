@@ -44,6 +44,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([])
+  const [activeYamlTab, setActiveYamlTab] = useState<'agents.yaml' | 'workflow.yaml'>('agents.yaml');
 
   // Load chat history on component mount
   useEffect(() => {
@@ -185,8 +186,13 @@ function App() {
     setIsLoading(true)
 
     try {
-      // Send message to API with current chat ID (pass undefined if null)
-      const apiResponse = await apiService.sendMessage(content, currentChatId || undefined)
+      // Route to correct API endpoint based on active tab
+      let apiResponse;
+      if (activeYamlTab === 'agents.yaml') {
+        apiResponse = await apiService.sendAgentMessage(content, currentChatId || undefined);
+      } else {
+        apiResponse = await apiService.sendWorkflowMessage(content, currentChatId || undefined);
+      }
 
       // Parse AI response (final_prompt if available)
       let parsedText = apiResponse.response
@@ -270,7 +276,7 @@ function App() {
       </div>
 
       {/* Right Panel - YAML */}
-      <YamlPanel yamlFiles={yamlFiles} isLoading={isLoading} />
+      <YamlPanel yamlFiles={yamlFiles} isLoading={isLoading} activeTab={activeYamlTab} setActiveTab={setActiveYamlTab} />
     </div>
   )
 }
