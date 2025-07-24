@@ -31,24 +31,24 @@ export function ChatCanvas({ messages, isLoading = false }: ChatCanvasProps) {
       <div
         key={message.id}
         className={cn(
-          "flex gap-4 p-6 transition-colors",
-          isUser ? "bg-white" : "bg-gray-50"
+          "flex gap-4 px-4 py-6 transition-colors font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]",
+          isUser ? "justify-end" : "justify-start",
         )}
       >
         {/* Avatar */}
         <div className={cn(
-          "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
+          "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center shadow-md",
           isUser 
-            ? "bg-blue-600 text-white" 
+            ? "bg-gradient-to-br from-blue-500 to-indigo-500 text-white" 
             : "bg-gray-200 text-gray-600"
         )}>
           {isUser ? <User size={16} /> : <Bot size={16} />}
         </div>
 
         {/* Message Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="font-medium text-xs text-gray-900">
+        <div className="flex-1 min-w-0 flex flex-col items-start">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="font-semibold text-xs text-gray-900 tracking-wide">
               {isUser ? 'You' : 'Maestro AI'}
             </span>
             <span className="text-xs text-gray-400">
@@ -58,21 +58,24 @@ export function ChatCanvas({ messages, isLoading = false }: ChatCanvasProps) {
 
           {/* YAML or Text Content */}
           {isYaml ? (
-            <div className="mt-4 p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="mt-2 p-4 bg-white border border-gray-200 rounded-2xl shadow-lg">
+              <div className="flex items-center gap-2 mb-2">
                 <FileText size={16} className="text-gray-400" />
                 <span className="text-xs font-medium text-gray-600">
                   Generated YAML
                 </span>
               </div>
-              <pre className="text-sm bg-gray-50 p-4 rounded-lg overflow-x-auto border font-mono whitespace-pre-wrap break-words">
+              <pre className="text-sm bg-gray-50 p-4 rounded-xl overflow-x-auto border font-mono whitespace-pre-wrap break-words">
                 <code className="text-gray-800">
                   {message.content.replace(/```yaml\n?|\n?```/g, '')}
                 </code>
               </pre>
             </div>
           ) : (
-            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+            <div className={cn(
+              "text-base text-gray-800 leading-relaxed whitespace-pre-wrap break-words bg-white/80 rounded-2xl px-5 py-3 shadow-md",
+              isUser ? "bg-gradient-to-br from-blue-50 to-indigo-50 text-right" : "bg-white/80 text-left"
+            )}>
               {message.content}
             </div>
           )}
@@ -82,14 +85,14 @@ export function ChatCanvas({ messages, isLoading = false }: ChatCanvasProps) {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-gradient-to-br from-gray-50 via-white to-blue-50">
       {/* Header */}
-      <div className="flex items-center justify-between p-1.5 border-b border-gray-100">
+      <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-3 border-b border-gray-100 bg-white/80 backdrop-blur-md shadow-md rounded-t-2xl">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Code size={18} className="text-white" />
+          <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center shadow-md">
+            <Code size={20} className="text-white" />
           </div>
-          <h1 className="text-lg font-semibold">Maestro AI Builder</h1>
+          <h1 className="text-xl font-bold tracking-wide text-gray-900">Maestro AI Builder</h1>
         </div>
       </div>
 

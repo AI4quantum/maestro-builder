@@ -164,10 +164,10 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
   const hasContent = filesToShow.some(file => file.content.trim() !== '')
 
   return (
-    <div className="w-1/3 h-full border-l border-gray-100 bg-white flex flex-col">
+    <div className="w-1/3 h-full border-l border-gray-100 bg-gradient-to-br from-white via-blue-50 to-indigo-50 flex flex-col font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif] shadow-2xl rounded-l-2xl">
       {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-gray-100">
-        <h2 className="text-lg font-semibold text-gray-900">Generated Files</h2>
+      <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-white/80 backdrop-blur-md rounded-tl-2xl">
+        <h2 className="text-lg font-bold text-gray-900 tracking-wide">Generated Files</h2>
         <div className="flex items-center gap-2">
           {isLoading && (
             <div className="flex items-center gap-2 text-xs text-blue-600">
@@ -177,14 +177,14 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
           )}
           <button
             onClick={() => setShowDiff(!showDiff)}
-            className="p-2 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-colors"
+            className="p-2 rounded-xl hover:bg-blue-100 hover:text-blue-700 transition-colors shadow-sm"
             title={showDiff ? 'Show full YAML' : 'Show diff'}
           >
             <GitCompare size={18} className={showDiff ? 'text-blue-600' : ''} />
           </button>
           <button
             onClick={() => setShowLineNumbers(!showLineNumbers)}
-            className="p-2 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-colors"
+            className="p-2 rounded-xl hover:bg-gray-100 hover:text-gray-700 transition-colors shadow-sm"
             title={showLineNumbers ? 'Hide line numbers' : 'Show line numbers'}
           >
             {showLineNumbers ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -193,7 +193,7 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
       </div>
 
       {/* File Tabs */}
-      <div className="flex border-b border-gray-100">
+      <div className="flex border-b border-gray-100 bg-white/70 backdrop-blur-md px-4 pt-2">
         {filesToShow.map((file, index) => {
           const hasFileContent = file.content.trim() !== ''
           return (
@@ -201,10 +201,10 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
               key={file.name}
               onClick={() => setActiveFile(index)}
               className={cn(
-                "flex items-center gap-2 px-6 py-4 text-xs border-b-2 transition-all duration-200 relative",
+                "flex items-center gap-2 px-6 py-2 text-sm rounded-full transition-all duration-200 relative shadow-sm",
                 activeFile === index
-                  ? "border-blue-600 text-blue-700 bg-blue-50 font-medium"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50",
+                  ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold scale-105 shadow-md"
+                  : "bg-white/80 text-gray-500 hover:text-blue-700 hover:bg-blue-50 border border-gray-200",
                 hasFileContent && "text-green-600"
               )}
             >
@@ -219,11 +219,11 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
       </div>
 
       {/* File Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden p-4">
         {filesToShow.length > 0 && hasContent ? (
           <div className="h-full flex flex-col">
             {/* File Actions */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-white/80 backdrop-blur-md rounded-t-xl">
               <span className="text-xs text-gray-500 font-medium">
                 {filesToShow[activeFile].name}
                 {filesToShow[activeFile].content.trim() !== '' && (
@@ -234,7 +234,7 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
                 <button
                   onClick={() => handleCopy(filesToShow[activeFile].content, filesToShow[activeFile].name)}
                   className={cn(
-                    "p-2 rounded-lg transition-colors flex items-center gap-1",
+                    "p-2 rounded-xl transition-colors flex items-center gap-1 shadow-sm",
                     copiedFile === filesToShow[activeFile].name
                       ? "bg-green-100 text-green-700"
                       : "hover:bg-white hover:text-gray-700"
@@ -252,14 +252,14 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
                 </button>
                 <button
                   onClick={() => handleDownload(filesToShow[activeFile])}
-                  className="p-2 rounded-lg hover:bg-white hover:text-gray-700 transition-colors"
+                  className="p-2 rounded-xl hover:bg-white hover:text-gray-700 transition-colors shadow-sm"
                   title="Download file"
                 >
                   <Download size={16} />
                 </button>
                 <button
                   onClick={() => handleDownload(filesToShow[activeFile])}
-                  className="p-2 rounded-lg hover:bg-white hover:text-gray-700 transition-colors"
+                  className="p-2 rounded-xl hover:bg-white hover:text-gray-700 transition-colors shadow-sm"
                   title="Save file"
                 >
                   <Save size={16} />
@@ -268,7 +268,7 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
             </div>
 
             {/* YAML Content */}
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto bg-white/90 rounded-b-xl shadow-xl p-4 mt-2">
               {filesToShow[activeFile].content.trim() === '' ? (
                 <div className="flex items-center justify-center h-full text-gray-400">
                   <div className="text-center max-w-sm">
