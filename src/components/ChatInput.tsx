@@ -59,15 +59,15 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
       <div className="relative">
         <div className={cn(
-          "flex items-end gap-3 p-4 bg-white border border-gray-200 rounded-2xl shadow-sm transition-shadow",
-          disabled ? "opacity-50 cursor-not-allowed" : "hover:shadow-md"
+          "flex items-end gap-3 p-4 bg-white/90 border border-gray-200 rounded-full shadow-xl transition-shadow backdrop-blur-md",
+          disabled ? "opacity-50 cursor-not-allowed" : "hover:shadow-lg"
         )}>
           {/* Attachment Button */}
           <button 
-            className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-xl hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={disabled}
           >
             <Paperclip size={20} />
@@ -76,7 +76,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
           {/* Edit YAML Button */}
           {onEditYaml && (
             <button
-              className="p-2 text-gray-400 hover:text-blue-600 transition-colors rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 text-gray-400 hover:text-blue-600 transition-colors rounded-xl hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={disabled}
               title="Edit YAML with an instruction"
               onClick={() => {
@@ -93,7 +93,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => !disabled && setShowSuggestions(!showSuggestions)}
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-lg hover:bg-gray-50 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-xl hover:bg-gray-100 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Show suggestions"
               disabled={disabled}
             >
@@ -140,7 +140,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
 
           {/* Voice Button */}
           <button 
-            className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-xl hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={disabled}
           >
             <Mic size={20} />
@@ -151,9 +151,9 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
             onClick={handleSend}
             disabled={!message.trim() || disabled}
             className={cn(
-              "p-2 rounded-xl transition-all duration-200",
+              "p-2 rounded-full transition-all duration-200 shadow-md",
               message.trim() && !disabled
-                ? "bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md"
+                ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600 scale-105"
                 : "bg-gray-100 text-gray-400 cursor-not-allowed"
             )}
           >
@@ -163,7 +163,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
 
         {/* Typing Indicator */}
         {isTyping && !disabled && (
-          <div className="absolute -top-8 left-4 text-sm text-gray-400 bg-white px-2 py-1 rounded">
+          <div className="absolute -top-8 left-4 text-sm text-gray-400 bg-white/90 px-2 py-1 rounded-full shadow-md">
             Press Enter to send, Shift+Enter for new line
           </div>
         )}
