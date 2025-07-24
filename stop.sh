@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Maestro Stop Script
-# Safely stops both the API and Builder frontend services
+# Maestro Stop Script (PID-based)
+# Safely stops all Maestro services using PID files
 
 set -e
 
@@ -12,111 +12,60 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
-print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+print_status() { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Change to the parent directory (maestro root) for PID file access
-cd ..
+SERVICES=(
+  "maestro_agents:logs/maestro_agents.pid"
+  "maestro_workflow:logs/maestro_workflow.pid"
+  "editing_agent:logs/editing_agent.pid"
+  "api:logs/api.pid"
+  "builder:logs/builder.pid"
+)
 
+print_status "Stopping Maestro services using PID files..."
 
-
-# Function to check if a port is in use
-check_port() {
-    local port=$1
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
-        return 0  # Port is in use
+all_stopped=true
+for entry in "${SERVICES[@]}"; do
+  name="${entry%%:*}"
+  pidfile="${entry#*:}"
+  if [ -f "$pidfile" ]; then
+    pid=$(cat "$pidfile")
+    if kill -0 "$pid" 2>/dev/null; then
+      print_status "Stopping $name (PID $pid)..."
+      kill "$pid" 2>/dev/null || true
+      sleep 2
+      if kill -0 "$pid" 2>/dev/null; then
+        print_error "$name (PID $pid) did not stop. Killing forcefully."
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+      if kill -0 "$pid" 2>/dev/null; then
+        print_error "$name (PID $pid) is still running!"
+        all_stopped=false
+      else
+        print_success "$name stopped."
+        rm -f "$pidfile"
+      fi
     else
-        return 1  # Port is free
+      print_warning "$name PID file found but process $pid is not running. Removing PID file."
+      rm -f "$pidfile"
     fi
-}
+  else
+    print_success "$name is not running (no PID file)."
+  fi
+done
 
-# Function to kill processes by port
-kill_process_by_port() {
-    local port=$1
-    local service_name=$2
-    
-    if check_port "$port"; then
-        print_warning "$service_name is still running on port $port, attempting to kill by port..."
-        local pids=$(lsof -ti :$port 2>/dev/null || true)
-        
-        if [ -n "$pids" ]; then
-            for pid in $pids; do
-                print_status "Killing process $pid on port $port..."
-                kill -9 "$pid" 2>/dev/null || true
-            done
-            
-            # Wait a moment and check again
-            sleep 2
-            if check_port "$port"; then
-                print_error "Failed to stop $service_name on port $port"
-                return 1
-            else
-                print_success "$service_name stopped on port $port"
-                return 0
-            fi
-        else
-            print_error "Could not find process using port $port"
-            return 1
-        fi
-    else
-        print_success "$service_name is not running on port $port"
-        return 0
-    fi
-}
-
-print_status "Stopping Maestro services..."
-
-# Stop services by port (more reliable than PID files)
-kill_process_by_port 8001 "API service"
-kill_process_by_port 5174 "Builder frontend"
-kill_process_by_port 8000 "Maestro backend"
-
-# Final verification
 echo ""
-print_status "Verifying services are stopped..."
-
-api_stopped=true
-builder_stopped=true
-maestro_stopped=true
-
-if check_port 8001; then
-    print_error "API service is still running on port 8001"
-    api_stopped=false
-fi
-
-if check_port 5174; then
-    print_error "Builder frontend is still running on port 5174"
-    builder_stopped=false
-fi
-
-if check_port 8000; then
-    print_error "Maestro backend is still running on port 8000"
-    maestro_stopped=false
-fi
-
-if [ "$api_stopped" = true ] && [ "$builder_stopped" = true ] && [ "$maestro_stopped" = true ]; then
-    print_success "All Maestro services have been stopped successfully!"
+if [ "$all_stopped" = true ]; then
+  print_success "All Maestro services have been stopped successfully!"
 else
-    print_error "Some services may still be running. You may need to manually stop them."
-    exit 1
+  print_error "Some services may still be running. You may need to manually stop them."
+  exit 1
 fi
 
 # Clean up log files if they exist
@@ -128,5 +77,17 @@ if [ -f "logs/builder.log" ]; then
     print_status "Builder logs are available at: logs/builder.log"
 fi
 
+if [ -f "logs/maestro_agents.log" ]; then
+    print_status "Agent Generation logs are available at: logs/maestro_agents.log"
+fi
+
+if [ -f "logs/maestro_workflow.log" ]; then
+    print_status "Workflow Generation logs are available at: logs/maestro_workflow.log"
+fi
+
+if [ -f "logs/editing_agent.log" ]; then
+    print_status "Editing Agent logs are available at: logs/editing_agent.log"
+fi
+
 echo ""
-echo "To start services again, run: ./start.sh [agents|workflow]" 
+echo "To start services again, run: ./start.sh" 

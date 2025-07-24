@@ -54,21 +54,29 @@ wait_for_service() {
 check_port 8001 && print_warning "API already running on port 8001"
 (check_port 5174) && print_warning "Builder frontend already running on port 5174"
 
-# Mode selection for Maestro backend
-MODE=$1
-if [ "$MODE" = "workflow" ]; then
-  MAESTRO_CMD="maestro serve ./meta-agents-v2/workflow_file_generation/agents.yaml ./meta-agents-v2/workflow_file_generation/workflow.yaml"
-elif [ "$MODE" = "agents" ] || [ -z "$MODE" ]; then
-  MAESTRO_CMD="maestro serve ./meta-agents-v2/agents_file_generation/agents.yaml ./meta-agents-v2/agents_file_generation/workflow.yaml"
-else
-  echo "Usage: ./start.sh [agents|workflow]"
-  exit 1
-fi
+# Start Maestro Agent Generation backend (port 8003)
+AGENTS_CMD="maestro serve ./meta-agents-v2/agents_file_generation/agents.yaml ./meta-agents-v2/agents_file_generation/workflow.yaml --port 8003"
+print_status "Starting Maestro Agent Generation backend: $AGENTS_CMD"
+nohup $AGENTS_CMD > logs/maestro_agents.log 2>&1 &
+AGENTS_PID=$!
+echo $AGENTS_PID > logs/maestro_agents.pid
+print_success "Maestro Agent Generation backend started with PID: $AGENTS_PID (port 8003)"
 
-print_status "Starting Maestro backend: $MAESTRO_CMD"
-nohup $MAESTRO_CMD > logs/maestro.log 2>&1 &
-MAESTRO_PID=$!
-print_success "Maestro backend started with PID: $MAESTRO_PID"
+# Start Maestro Workflow Generation backend (port 8004)
+WORKFLOW_CMD="maestro serve ./meta-agents-v2/workflow_file_generation/agents.yaml ./meta-agents-v2/workflow_file_generation/workflow.yaml --port 8004"
+print_status "Starting Maestro Workflow Generation backend: $WORKFLOW_CMD"
+nohup $WORKFLOW_CMD > logs/maestro_workflow.log 2>&1 &
+WORKFLOW_PID=$!
+echo $WORKFLOW_PID > logs/maestro_workflow.pid
+print_success "Maestro Workflow Generation backend started with PID: $WORKFLOW_PID (port 8004)"
+
+# Start Editing Agent backend (port 8002)
+EDITING_AGENT_CMD="maestro serve ./meta-agents-v2/editing_agent/agents.yaml ./meta-agents-v2/editing_agent/workflow.yaml --port 8002"
+print_status "Starting Editing Agent backend: $EDITING_AGENT_CMD"
+nohup $EDITING_AGENT_CMD > logs/editing_agent.log 2>&1 &
+EDITING_AGENT_PID=$!
+echo $EDITING_AGENT_PID > logs/editing_agent.pid
+print_success "Editing Agent backend started with PID: $EDITING_AGENT_PID (port 8002)"
 
 ### ───────────── Start API ─────────────
 
@@ -107,6 +115,8 @@ fi
 mkdir -p storage
 
 PYTHONPATH="$SCRIPT_DIR" nohup bash -c "source \"$VENV_DIR/bin/activate\" && python -m api.main" >> "$SCRIPT_DIR/logs/api.log" 2>&1 &
+API_PID=$!
+echo $API_PID > "$SCRIPT_DIR/logs/api.pid"
 
 print_success "API service started"
 
@@ -138,6 +148,8 @@ fi
 
 print_status "Starting Builder frontend on http://localhost:5174"
 nohup npm run dev > "$SCRIPT_DIR/logs/builder.log" 2>&1 &
+BUILDER_PID=$!
+echo $BUILDER_PID > "$SCRIPT_DIR/logs/builder.pid"
 
 print_success "Builder frontend started"
 
@@ -165,13 +177,19 @@ fi
 print_success "All Maestro services are now running!"
 echo ""
 echo "Services:"
+echo "  - Agent Generation Backend: http://localhost:8003"
+echo "  - Workflow Generation Backend: http://localhost:8004"
+echo "  - Editing Agent Backend: http://localhost:8002"
 echo "  - API: http://localhost:8001"
 echo "  - API Docs: http://localhost:8001/docs"
 echo "  - Builder Frontend: http://localhost:5174"
 echo ""
 echo "Logs:"
+echo "  - Agent Generation: logs/maestro_agents.log"
+echo "  - Workflow Generation: logs/maestro_workflow.log"
+echo "  - Editing Agent: logs/editing_agent.log"
 echo "  - API: logs/api.log"
 echo "  - Builder: logs/builder.log"
 echo ""
 echo "To stop all services, run: ./stop.sh"
-echo "To view logs: tail -f logs/api.log | tail -f logs/builder.log"
+echo "To view logs: tail -f logs/api.log | tail -f logs/builder.log | tail -f logs/maestro_agents.log | tail -f logs/maestro_workflow.log | tail -f logs/editing_agent.log"

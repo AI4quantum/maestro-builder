@@ -11,6 +11,8 @@ import DiffMatchPatch from 'diff-match-patch'
 interface YamlPanelProps {
   yamlFiles: YamlFile[]
   isLoading?: boolean
+  activeTab: 'agents.yaml' | 'workflow.yaml'
+  setActiveTab: (tab: 'agents.yaml' | 'workflow.yaml') => void
 }
 
 interface DiffLine {
@@ -42,8 +44,9 @@ function decodeEscaped(content: string) {
   return content.replace(/\\n/g, '\n').replace(/\\'/g, "'").replace(/\\"/g, '"')
 }
 
-export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
-  const [activeFile, setActiveFile] = useState(0)
+export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTab }: YamlPanelProps) {
+  const allFileNames = ['agents.yaml', 'workflow.yaml']
+  const activeFile = allFileNames.indexOf(activeTab)
   const [showLineNumbers, setShowLineNumbers] = useState(true)
   const [copiedFile, setCopiedFile] = useState<string | null>(null)
   const [showDiff, setShowDiff] = useState(true)
@@ -56,7 +59,6 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
   }, [yamlFiles, activeFile, showDiff])
 
   // Always keep both files in the panel
-  const allFileNames = ['agents.yaml', 'workflow.yaml']
   const filesToShow: YamlFile[] = allFileNames.map(name =>
     yamlFiles.find(f => f.name === name) || { name, content: '', language: 'yaml' as const }
   )
@@ -199,7 +201,7 @@ export function YamlPanel({ yamlFiles, isLoading = false }: YamlPanelProps) {
           return (
             <button
               key={file.name}
-              onClick={() => setActiveFile(index)}
+              onClick={() => setActiveTab(file.name as 'agents.yaml' | 'workflow.yaml')}
               className={cn(
                 "flex items-center gap-2 px-6 py-4 text-xs border-b-2 transition-all duration-200 relative",
                 activeFile === index
