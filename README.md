@@ -44,7 +44,7 @@ This will start:
 - Agent Generation backend (http://localhost:8003)
 - Workflow Generation backend (http://localhost:8004)
 
-To stop all services, run:
+To stop all services, run (optionally add -c to clear logs):
 ```bash
 ./stop.sh
 ```

@@ -5,10 +5,11 @@ import { cn } from '../lib/utils'
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void
+  onEditYaml?: (instruction: string) => void
   disabled?: boolean
 }
 
-export function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
+export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -71,6 +72,22 @@ export function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
           >
             <Paperclip size={20} />
           </button>
+
+          {/* Edit YAML Button */}
+          {onEditYaml && (
+            <button
+              className="p-2 text-gray-400 hover:text-blue-600 transition-colors rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={disabled}
+              title="Edit YAML with an instruction"
+              onClick={() => {
+                const defaultInstruction = 'Please edit the YAML as needed.';
+                console.log('Edit YAML button clicked, auto-submitting with instruction:', defaultInstruction);
+                onEditYaml(defaultInstruction);
+              }}
+            >
+              Edit YAML
+            </button>
+          )}
 
           {/* Suggestions Dropdown */}
           <div className="relative" ref={dropdownRef}>

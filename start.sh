@@ -50,10 +50,6 @@ wait_for_service() {
     return 1
 }
 
-# Warn if services are already running
-check_port 8001 && print_warning "API already running on port 8001"
-(check_port 5174) && print_warning "Builder frontend already running on port 5174"
-
 # Start Maestro Agent Generation backend (port 8003)
 AGENTS_CMD="maestro serve ./meta-agents-v2/agents_file_generation/agents.yaml ./meta-agents-v2/agents_file_generation/workflow.yaml --port 8003"
 print_status "Starting Maestro Agent Generation backend: $AGENTS_CMD"
