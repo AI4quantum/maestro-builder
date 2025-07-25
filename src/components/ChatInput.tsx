@@ -63,11 +63,11 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
       <div className="relative">
         <div className={cn(
           "flex items-end gap-3 p-4 bg-white/90 border border-gray-200 rounded-full shadow-xl transition-shadow backdrop-blur-md",
-          disabled ? "opacity-50 cursor-not-allowed" : "hover:shadow-lg"
+          disabled ? "opacity-50" : "hover:shadow-lg"
         )}>
           {/* Attachment Button */}
           <button 
-            className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-xl hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-xl hover:bg-gray-100 disabled:opacity-50"
             disabled={disabled}
           >
             <Paperclip size={20} />
@@ -76,7 +76,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
           {/* Edit YAML Button */}
           {onEditYaml && (
             <button
-              className="p-2 text-gray-400 hover:text-blue-600 transition-colors rounded-xl hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 text-gray-400 hover:text-blue-600 transition-colors rounded-xl hover:bg-blue-50 disabled:opacity-50"
               disabled={disabled}
               title="Edit YAML with an instruction"
               onClick={() => {
@@ -93,7 +93,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => !disabled && setShowSuggestions(!showSuggestions)}
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-xl hover:bg-gray-100 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-xl hover:bg-gray-100 flex items-center gap-1 disabled:opacity-50"
               title="Show suggestions"
               disabled={disabled}
             >
@@ -109,7 +109,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
                     <button
                       key={suggestion}
                       onClick={() => handleSuggestionClick(suggestion)}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
                       disabled={disabled}
                     >
                       {suggestion}
@@ -132,7 +132,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
               }}
               onKeyDown={handleKeyDown}
               placeholder={disabled ? "Processing..." : "Ask me to help you build your Maestro workflow..."}
-              className="w-full h-full min-h-[44px] max-h-32 resize-none bg-transparent border-none outline-none text-base placeholder:text-gray-400 leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]"
+              className="w-full h-full min-h-[44px] max-h-32 resize-none bg-transparent border-none outline-none text-base placeholder:text-gray-400 leading-relaxed disabled:opacity-50 font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]"
               rows={1}
               disabled={disabled}
             />
@@ -140,7 +140,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
 
           {/* Voice Button */}
           <button 
-            className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-xl hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-xl hover:bg-gray-100 disabled:opacity-50"
             disabled={disabled}
           >
             <Mic size={20} />
