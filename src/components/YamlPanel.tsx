@@ -13,6 +13,7 @@ interface YamlPanelProps {
   isLoading?: boolean
   activeTab: 'agents.yaml' | 'workflow.yaml'
   setActiveTab: (tab: 'agents.yaml' | 'workflow.yaml') => void
+  onDirectEdit?: (fileName: string, newContent: string) => void
 }
 
 interface DiffLine {
@@ -44,7 +45,7 @@ function decodeEscaped(content: string) {
   return content.replace(/\\n/g, '\n').replace(/\\'/g, "'").replace(/\\"/g, '"')
 }
 
-export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTab }: YamlPanelProps) {
+export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTab, onDirectEdit }: YamlPanelProps) {
   const allFileNames = ['agents.yaml', 'workflow.yaml']
   const activeFile = allFileNames.indexOf(activeTab)
   const [showLineNumbers, setShowLineNumbers] = useState(true)
@@ -165,6 +166,121 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
 
   const hasContent = filesToShow.some(file => file.content.trim() !== '')
 
+  const activeYamlFile = filesToShow[activeFile];
+
+  const handleYamlClick = () => {
+    if (activeYamlFile.content.trim() !== '') {
+      const textarea = document.createElement('textarea')
+      textarea.value = decodeEscaped(activeYamlFile.content)
+      textarea.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+        padding: 16px;
+        border: 2px solid #3b82f6;
+        border-radius: 8px;
+        background: white;
+        z-index: 1000;
+        resize: none;
+        white-space: pre;
+        overflow-wrap: normal;
+        overflow-x: auto;
+      `
+      
+      const yamlContainer = document.querySelector('.yaml-content-container')
+      if (yamlContainer) {
+        yamlContainer.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        
+        // Ctrl+S or Enter
+        const handleKeyDown = (e: KeyboardEvent) => {
+          if ((e.ctrlKey && e.key === 's') || e.key === 'Enter') {
+            e.preventDefault()
+            if (onDirectEdit) {
+              const encodedContent = textarea.value.replace(/\n/g, '\\n').replace(/'/g, "\\'").replace(/"/g, '\\"')
+              onDirectEdit(activeYamlFile.name, encodedContent)
+            }
+            yamlContainer.removeChild(textarea)
+            document.removeEventListener('keydown', handleKeyDown)
+          }
+        }
+        
+        // escape to cancel
+        const handleEscape = (e: KeyboardEvent) => {
+          if (e.key === 'Escape') {
+            yamlContainer.removeChild(textarea)
+            document.removeEventListener('keydown', handleKeyDown)
+            document.removeEventListener('keydown', handleEscape)
+          }
+        }
+        
+        document.addEventListener('keydown', handleKeyDown)
+        document.addEventListener('keydown', handleEscape)
+        
+        // save/cancel buttons
+        const buttonContainer = document.createElement('div')
+        buttonContainer.style.cssText = `
+          position: absolute;
+          bottom: 8px;
+          right: 8px;
+          display: flex;
+          gap: 8px;
+          z-index: 1001;
+        `
+        
+        const saveButton = document.createElement('button')
+        saveButton.textContent = 'Save'
+        saveButton.style.cssText = `
+          padding: 4px 12px;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          font-size: 12px;
+          cursor: pointer;
+        `
+        saveButton.onclick = () => {
+          if (onDirectEdit) {
+            // When saving, need to re-encode to match format
+            const encodedContent = textarea.value.replace(/\n/g, '\\n').replace(/'/g, "\\'").replace(/"/g, '\\"')
+            onDirectEdit(activeYamlFile.name, encodedContent)
+          }
+          yamlContainer.removeChild(textarea)
+          yamlContainer.removeChild(buttonContainer)
+          document.removeEventListener('keydown', handleKeyDown)
+          document.removeEventListener('keydown', handleEscape)
+        }
+        
+        const cancelButton = document.createElement('button')
+        cancelButton.textContent = 'Cancel'
+        cancelButton.style.cssText = `
+          padding: 4px 12px;
+          background: #6b7280;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          font-size: 12px;
+          cursor: pointer;
+        `
+        cancelButton.onclick = () => {
+          yamlContainer.removeChild(textarea)
+          yamlContainer.removeChild(buttonContainer)
+          document.removeEventListener('keydown', handleKeyDown)
+          document.removeEventListener('keydown', handleEscape)
+        }
+        
+        buttonContainer.appendChild(saveButton)
+        buttonContainer.appendChild(cancelButton)
+        yamlContainer.appendChild(buttonContainer)
+      }
+    }
+  }
+
   return (
     <div className="w-1/3 h-full border-l border-gray-100 bg-gradient-to-br from-white via-blue-50 to-indigo-50 flex flex-col font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif] shadow-2xl rounded-l-2xl">
       {/* Header */}
@@ -266,11 +382,19 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
                 >
                   <Save size={16} />
                 </button>
+                {/* Direct Edit Button */}
+                <button
+                  onClick={handleYamlClick}
+                  className="p-2 rounded-xl hover:bg-blue-100 hover:text-blue-700 transition-colors shadow-sm"
+                  title="Directly edit YAML"
+                >
+                  <span className="text-xs font-semibold">Edit</span>
+                </button>
               </div>
             </div>
 
             {/* YAML Content */}
-            <div className="flex-1 overflow-auto bg-white/90 rounded-b-xl shadow-xl p-4 mt-2">
+            <div className="flex-1 overflow-auto bg-white/90 rounded-b-xl shadow-xl p-4 mt-2 yaml-content-container relative">
               {filesToShow[activeFile].content.trim() === '' ? (
                 <div className="flex items-center justify-center h-full text-gray-400">
                   <div className="text-center max-w-sm">
@@ -282,13 +406,19 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
                   </div>
                 </div>
               ) : showDiff ? (
-                renderDiff(prevYamlRef.current[filesToShow[activeFile].name] || '', filesToShow[activeFile].content)
+                <div onClick={handleYamlClick} style={{ cursor: 'pointer' }}>
+                  {renderDiff(prevYamlRef.current[filesToShow[activeFile].name] || '', filesToShow[activeFile].content)}
+                </div>
               ) : showLineNumbers ? (
-                renderLineNumbers(filesToShow[activeFile].content)
+                <div onClick={handleYamlClick} style={{ cursor: 'pointer' }}>
+                  {renderLineNumbers(filesToShow[activeFile].content)}
+                </div>
               ) : (
-                <pre className="text-sm font-mono p-6 overflow-x-auto bg-gray-50 font-['Courier_New'] whitespace-pre">
-                  <code className="language-yaml whitespace-pre">{decodeEscaped(filesToShow[activeFile].content)}</code>
-                </pre>
+                <div onClick={handleYamlClick} style={{ cursor: 'pointer' }}>
+                  <pre className="text-sm font-mono p-6 overflow-x-auto bg-gray-50 font-['Courier_New'] whitespace-pre">
+                    <code className="language-yaml whitespace-pre">{decodeEscaped(filesToShow[activeFile].content)}</code>
+                  </pre>
+                </div>
               )}
             </div>
           </div>

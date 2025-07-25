@@ -301,6 +301,14 @@ function App() {
     }
   };
 
+  const handleDirectYamlEdit = (fileName: string, newContent: string) => {
+    setYamlFiles(prev => prev.map(f =>
+      f.name === fileName
+        ? { ...f, content: newContent }
+        : f
+    ));
+  };
+
   return (
     <div className="h-screen flex bg-white overflow-hidden">
       {/* Left Sidebar */}
@@ -325,7 +333,13 @@ function App() {
       </div>
 
       {/* Right Panel - YAML */}
-      <YamlPanel yamlFiles={yamlFiles} isLoading={isLoading} activeTab={activeYamlTab} setActiveTab={setActiveYamlTab} />
+      <YamlPanel 
+        yamlFiles={yamlFiles} 
+        isLoading={isLoading} 
+        activeTab={activeYamlTab} 
+        setActiveTab={setActiveYamlTab}
+        onDirectEdit={handleDirectYamlEdit}
+      />
     </div>
   )
 }
