@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { FileText, Copy, Download, Eye, EyeOff, Check, Save, GitCompare } from 'lucide-react'
+import { FileText, Copy, Download, Eye, EyeOff, Check, Save, GitCompare, CheckCircle, AlertCircle } from 'lucide-react'
 import type { YamlFile } from '../App'
 import { cn } from '../lib/utils'
 import Prism from 'prismjs'
@@ -7,6 +7,8 @@ import 'prismjs/components/prism-yaml'
 import 'prismjs/themes/prism.css'
 // @ts-ignore
 import DiffMatchPatch from 'diff-match-patch'
+import { apiService } from '../services/api'
+import type { ValidateYamlResponse } from '../services/api'
 
 interface YamlPanelProps {
   yamlFiles: YamlFile[]
@@ -51,6 +53,8 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
   const [showLineNumbers, setShowLineNumbers] = useState(true)
   const [copiedFile, setCopiedFile] = useState<string | null>(null)
   const [showDiff, setShowDiff] = useState(true)
+  const [validationResult, setValidationResult] = useState<ValidateYamlResponse | null>(null)
+  const [isValidating, setIsValidating] = useState(false)
   const prevYamlRef = useRef<{ [name: string]: string }>({})
   const lastUpdateRef = useRef<{ [name: string]: string }>({})
 
@@ -162,6 +166,31 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
         </div>
       </div>
     )
+  }
+
+  const handleValidate = async () => {
+    const activeYamlFile = filesToShow[activeFile]
+    if (!activeYamlFile.content.trim()) {
+      return
+    }
+
+    setIsValidating(true)
+    setValidationResult(null)
+
+    try {
+      const fileType = activeYamlFile.name === 'agents.yaml' ? 'agents' : 'workflow'
+      const result = await apiService.validateYaml(activeYamlFile.content, fileType)
+      setValidationResult(result)
+    } catch (error) {
+      console.error('Validation error:', error)
+      setValidationResult({
+        is_valid: false,
+        message: 'Validation failed',
+        errors: ['An unexpected error occurred during validation']
+      })
+    } finally {
+      setIsValidating(false)
+    }
   }
 
   const hasContent = filesToShow.some(file => file.content.trim() !== '')
@@ -390,8 +419,78 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
                 >
                   <span className="text-xs font-semibold">Edit</span>
                 </button>
+                <button
+                  onClick={handleValidate}
+                  disabled={isValidating || !filesToShow[activeFile].content.trim()}
+                  className={cn(
+                    "p-2 rounded-xl transition-colors shadow-sm",
+                    isValidating || !filesToShow[activeFile].content.trim()
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:bg-purple-100 hover:text-purple-700"
+                  )}
+                  title={!filesToShow[activeFile].content.trim() ? "No content to validate" : "Validate YAML"}
+                >
+                  {isValidating ? (
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-xs">Validating...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <CheckCircle size={16} />
+                      <span className="text-xs">Validate</span>
+                    </div>
+                  )}
+                </button>
               </div>
             </div>
+
+            {/* Validation Result */}
+            {validationResult && (
+              <div className={cn(
+                "p-4 border-b border-gray-100",
+                validationResult.is_valid 
+                  ? "bg-green-50 border-green-200" 
+                  : "bg-red-50 border-red-200"
+              )}>
+                <div className="flex items-start gap-3">
+                  {validationResult.is_valid ? (
+                    <CheckCircle size={20} className="text-green-600 mt-0.5 flex-shrink-0" />
+                  ) : (
+                    <AlertCircle size={20} className="text-red-600 mt-0.5 flex-shrink-0" />
+                  )}
+                  <div className="flex-1">
+                    <p className={cn(
+                      "text-sm font-medium",
+                      validationResult.is_valid ? "text-green-800" : "text-red-800"
+                    )}>
+                      {validationResult.message}
+                    </p>
+                    {validationResult.errors.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-gray-700 mb-1">Errors:</p>
+                        <ul className="text-xs text-gray-600 space-y-1">
+                          {validationResult.errors.map((error, index) => (
+                            <li key={index} className="bg-white/50 px-2 py-1 rounded">
+                              {error}
+                            </li>
+                          ))}
+                        </ul>
+                        {validationResult.errors.some(error => error.includes('file_path')) && (
+                          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+                            <p className="text-xs text-blue-800 font-medium mb-1">💡 Suggestion:</p>
+                            <p className="text-xs text-blue-700">
+                              Code agents require a 'file_path' field. Add <code className="bg-gray-100 px-1 rounded">file_path: ./your_agent_name.py</code> to the spec section, 
+                              or use <code className="bg-gray-100 px-1 rounded">framework: beeai</code> instead.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* YAML Content */}
             <div className="flex-1 overflow-auto bg-white/90 rounded-b-xl shadow-xl p-4 mt-2 yaml-content-container relative">

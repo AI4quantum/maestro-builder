@@ -35,6 +35,12 @@ export interface ChatSession {
   yaml_files: Record<string, string>
 }
 
+export interface ValidateYamlResponse {
+  is_valid: boolean
+  message: string
+  errors: string[]
+}
+
 export interface ChatHistory {
   id: string
   name: string
@@ -270,6 +276,34 @@ class ApiService {
     } catch (error) {
       console.error('Health check failed:', error)
       return false
+    }
+  }
+
+  async validateYaml(yamlContent: string, fileType: 'agents' | 'workflow'): Promise<ValidateYamlResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/validate_yaml`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          yaml_content: yamlContent,
+          file_type: fileType
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error validating YAML:', error)
+      return {
+        is_valid: false,
+        message: 'Failed to validate YAML. Please check your connection and try again.',
+        errors: [error instanceof Error ? error.message : 'Unknown error']
+      }
     }
   }
 
