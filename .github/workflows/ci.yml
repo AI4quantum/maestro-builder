@@ -2,9 +2,7 @@ name: Run Python Tests
 
 on:
   pull_request:
-    branches:
-      - main
-      - '**'
+    branches: [ main ]
 
 jobs:
   test:
@@ -26,7 +24,7 @@ jobs:
           pip install --upgrade pip
           pip install -r api/requirements.txt
           pip install pytest requests
-          pip install git+https://github.com/AI4quantum/maestro.git@v0.3.0
+          pip install git+https://github.com/AI4quantum/maestro.git@main
           pip install "beeai-framework[duckduckgo]"
 
       - name: Check maestro CLI installation
@@ -38,4 +36,4 @@ jobs:
       - name: Run tests
         run: |
           source .venv/bin/activate
-          pytest tests/ 
+          pytest tests/ -v 

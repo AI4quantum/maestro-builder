@@ -12,6 +12,9 @@ from api.ai_agent import MaestroBuilderAgent
 from api.database import Database
 import uuid
 import requests
+import subprocess
+import tempfile
+import os
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -82,6 +85,15 @@ class EditYamlRequest(BaseModel):
 
 class EditYamlResponse(BaseModel):
     edited_yaml: str
+
+class ValidateYamlRequest(BaseModel):
+    yaml_content: str
+    file_type: str
+
+class ValidateYamlResponse(BaseModel):
+    is_valid: bool
+    message: str
+    errors: List[str] = []
 
 # ---------------------------------------
 # Routes
@@ -276,6 +288,79 @@ async def edit_yaml(request: EditYamlRequest):
         return {"edited_yaml": edited_yaml}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Editing Agent failed: {e}")
+
+
+@app.post("/api/validate_yaml", response_model=ValidateYamlResponse)
+async def validate_yaml(request: ValidateYamlRequest):
+    try:
+        # fix double-escaped characters
+        import codecs
+        unescaped_content = codecs.decode(request.yaml_content, 'unicode_escape')
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_file:
+            temp_file.write(unescaped_content)
+            temp_file_path = temp_file.name
+        
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            result = subprocess.run(
+                ['maestro', 'validate', temp_file_path],
+                capture_output=True,
+                text=True,
+                cwd=project_root
+            )
+            os.unlink(temp_file_path)
+            
+            if result.returncode == 0:
+                return ValidateYamlResponse(
+                    is_valid=True,
+                    message="YAML file is valid!",
+                    errors=[]
+                )
+            else:
+                error_output = result.stderr.strip() or result.stdout.strip()
+                import re
+                def strip_ansi_codes(text):
+                    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+                    return ansi_escape.sub('', text)
+                
+                cleaned_error_output = strip_ansi_codes(error_output)
+                error_lines = [line for line in cleaned_error_output.split('\n') if line.strip()]
+                
+                if not error_lines:
+                    error_lines = ["Validation failed but no specific error message was provided"]
+                if "'file_path'" in cleaned_error_output:
+                    error_lines.append("Note: Code agents require a 'file_path' field that specifies where the code should be saved.")
+                    error_lines.append("Add 'file_path: ./your_agent_name.py' to the spec section.")
+                    error_lines.append("Alternatively, consider using 'framework: beeai' for agents that don't need file paths.")
+                
+                return ValidateYamlResponse(
+                    is_valid=False,
+                    message="YAML validation failed",
+                    errors=error_lines
+                )
+                
+        except FileNotFoundError:
+            os.unlink(temp_file_path)
+            return ValidateYamlResponse(
+                is_valid=False,
+                message="Maestro CLI not found. Please ensure maestro is installed and available in PATH.",
+                errors=["Maestro CLI not found"]
+            )
+        except Exception as e:
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+            return ValidateYamlResponse(
+                is_valid=False,
+                message=f"Validation error: {str(e)}",
+                errors=[str(e)]
+            )
+            
+    except Exception as e:
+        return ValidateYamlResponse(
+            is_valid=False,
+            message=f"Failed to validate YAML: {str(e)}",
+            errors=[str(e)]
+        )
 
 
 @app.get("/api/health")
