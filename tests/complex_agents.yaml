@@ -1,0 +1,38 @@
+apiVersion: maestro/v1alpha1
+kind: Agent
+metadata:
+  name: text_extractor
+spec:
+  framework: code
+  mode: local
+  file_path: ./text_extractor.py
+  description: |
+    Extracts text from a document for analysis.
+  code: |
+    import requests
+    from bs4 import BeautifulSoup
+
+    def extract_text(url):
+        response = requests.get(url)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            return '\n'.join([p.text for p in soup.find_all('p')])
+        else:
+            return "Failed to fetch document"
+
+    extracted_text = extract_text("https://example.com/document.pdf")
+    print(extracted_text)
+
+---
+apiVersion: maestro/v1alpha1
+kind: Agent
+metadata:
+  name: key_point_analyzer
+spec:
+  model: deepseek-r1:latest
+  framework: beeai
+  mode: remote
+  description: |
+    Identifies important information within the extracted text.
+  instructions: |
+    Analyze the provided text to extract key points and summarize them in a structured format.
