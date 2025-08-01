@@ -24,7 +24,7 @@ function App() {
     {
       id: '1',
       role: 'assistant',
-      content: 'Hello! I\'m your Maestro AI Builder assistant. I can help you create agents.yaml and workflow.yaml files for your Maestro agents and workflows. What would you like to build today?',
+      content: 'Hello! I\'m your Maestro AI Builder assistant. I can help you create both agents.yaml and workflow.yaml files from a single prompt. Just describe what you want to build, and I\'ll generate both files automatically. What would you like to build today?',
       timestamp: new Date()
     }
   ])
@@ -111,7 +111,7 @@ function App() {
         {
           id: '1',
           role: 'assistant',
-          content: 'Hello! I\'m your Maestro AI Builder assistant. I can help you create agents.yaml and workflow.yaml files for your Maestro agents and workflows. What would you like to build today?',
+          content: 'Hello! I\'m your Maestro AI Builder assistant. I can help you create both agents.yaml and workflow.yaml files from a single prompt. Just describe what you want to build, and I\'ll generate both files automatically. What would you like to build today?',
           timestamp: new Date()
         }
       ])
@@ -187,13 +187,8 @@ function App() {
     setIsLoading(true)
 
     try {
-      // Route to correct API endpoint based on active tab
-      let apiResponse;
-      if (activeYamlTab === 'agents.yaml') {
-        apiResponse = await apiService.sendAgentMessage(content, currentChatId || undefined);
-      } else {
-        apiResponse = await apiService.sendWorkflowMessage(content, currentChatId || undefined);
-      }
+      // Use the complete endpoint to generate both agents and workflow
+      const apiResponse = await apiService.sendCompleteMessage(content, currentChatId || undefined);
 
       // Parse AI response (final_prompt if available)
       let parsedText = apiResponse.response
@@ -206,7 +201,8 @@ function App() {
         // Not JSON — ignore
       }
 
-      parsedText = parsedText.replace(/^```yaml\s*/i, '').replace(/```$/, '')
+      // Don't strip YAML code blocks from the response text since we want to show the full response
+      // The YAML files are handled separately in the yaml_files array
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -217,7 +213,7 @@ function App() {
 
       setMessages(prev => [...prev, assistantMessage])
 
-      // Update YAML files from API response, merging with existing files
+      // Update YAML files from API response, ensuring both files are updated
       const updatedYamlFiles = yamlFiles.map(file => {
         const apiFile = apiResponse.yaml_files.find(apiFile => apiFile.name === file.name)
         if (apiFile) {
@@ -227,6 +223,17 @@ function App() {
           }
         }
         return file
+      })
+
+      apiResponse.yaml_files.forEach(apiFile => {
+        const existingFile = updatedYamlFiles.find(file => file.name === apiFile.name)
+        if (!existingFile) {
+          updatedYamlFiles.push({
+            name: apiFile.name,
+            content: apiFile.content,
+            language: 'yaml' as const
+          })
+        }
       })
 
       setYamlFiles(updatedYamlFiles)

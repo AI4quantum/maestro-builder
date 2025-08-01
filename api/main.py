@@ -15,6 +15,8 @@ import requests
 import subprocess
 import tempfile
 import os
+import yaml
+import re
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -159,6 +161,107 @@ async def chat_builder_workflow(message: ChatMessage):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Workflow Builder failed: {e}")
+
+
+@app.post("/api/chat_builder_complete", response_model=ChatResponse)
+async def chat_builder_complete(message: ChatMessage):
+    """
+    Generate both agents.yaml and workflow.yaml from a single user prompt.
+    First generates agents, then parses them to create a workflow prompt.
+    """
+    try:
+        agents_resp = requests.post(
+            "http://localhost:8003/chat",
+            json={"prompt": message.content, "agent": "TaskInterpreter"},
+        )
+        if agents_resp.status_code != 200:
+            raise Exception(f"Agents generation failed: {agents_resp.text}")
+
+        agents_output = agents_resp.json().get("response", "")
+        agents_yaml = ""
+        if "```yaml" in agents_output:
+            agents_yaml = (
+                agents_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
+            )
+        elif "```" in agents_output:
+            agents_yaml = agents_output.split("```", 1)[-1].split("```", 1)[0].strip()
+        else:
+
+            yaml_match = re.search(r'apiVersion:.*?(?=\n\n|\Z)', agents_output, re.DOTALL)
+            if yaml_match:
+                agents_yaml = yaml_match.group(0).strip()
+
+        agents_info = []
+        try:
+            agent_blocks = agents_yaml.split('---')
+            for block in agent_blocks:
+                if block.strip():
+                    agent_data = yaml.safe_load(block)
+                    if agent_data and 'metadata' in agent_data and 'name' in agent_data['metadata']:
+                        name = agent_data['metadata']['name']
+                        description = agent_data.get('spec', {}).get('description', '')
+                        agents_info.append({
+                            'name': name,
+                            'description': description
+                        })
+        except yaml.YAMLError:
+
+            name_matches = re.findall(r'name:\s*(\w+)', agents_yaml)
+            desc_matches = re.findall(r'description:\s*\|\s*\n\s*(.+?)(?=\n\s*\w+:|$)', agents_yaml, re.DOTALL)
+            
+            for i, name in enumerate(name_matches):
+                description = desc_matches[i] if i < len(desc_matches) else ""
+                agents_info.append({
+                    'name': name,
+                    'description': description.strip()
+                })
+
+        workflow_prompt = f"Create a workflow that uses the following agents:\n\n"
+        for i, agent in enumerate(agents_info, 1):
+            workflow_prompt += f"agent{i}: {agent['name']} – {agent['description']}\n"
+        workflow_prompt += f"\nprompt: {message.content}"
+
+
+        workflow_resp = requests.post(
+            "http://localhost:8004/chat",
+            json={"prompt": workflow_prompt, "agent": "WorkflowYAMLBuilder"},
+        )
+        if workflow_resp.status_code != 200:
+            raise Exception(f"Workflow generation failed: {workflow_resp.text}")
+
+        workflow_output = workflow_resp.json().get("response", "")
+        workflow_yaml = ""
+        if "```yaml" in workflow_output:
+            workflow_yaml = (
+                workflow_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
+            )
+        elif "```" in workflow_output:
+            workflow_yaml = workflow_output.split("```", 1)[-1].split("```", 1)[0].strip()
+        else:
+            yaml_match = re.search(r'apiVersion:.*?(?=\n\n|\Z)', workflow_output, re.DOTALL)
+            if yaml_match:
+                workflow_yaml = yaml_match.group(0).strip()
+
+        clean_response = f"""✅ Successfully generated both agents.yaml and workflow.yaml from your prompt!
+
+Your request: "{message.content}"
+
+I've created:
+• **agents.yaml** - Contains the agent definitions
+• **workflow.yaml** - Contains the workflow that uses those agents
+
+Both files are now available in the YAML panel on the right. You can switch between tabs to view each file."""
+
+        return {
+            "response": clean_response,
+            "yaml_files": [
+                {"name": "agents.yaml", "content": agents_yaml},
+                {"name": "workflow.yaml", "content": workflow_yaml}
+            ],
+            "chat_id": str(uuid.uuid4()),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Complete Builder failed: {e}")
 
 
 @app.get("/api/get_yamls/{chat_id}", response_model=List[YamlFile])
