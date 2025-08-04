@@ -6,8 +6,8 @@ metadata:
     app: meta-agents-v2
 spec:
   model: deepseek-r1:latest
-  framework: beeai
-  mode: remote
+  framework: openai
+  mode: local
   description: "Parses user goals and converts them into a structured list of agents with descriptions."
   instructions: |
     You are a **task-to-agent planner** that takes a user's natural language input and outputs a list of agents needed to accomplish that task.
@@ -72,8 +72,8 @@ metadata:
     app: meta-agents-v2
 spec:
   model: deepseek-r1:latest
-  framework: beeai
-  mode: remote
+  framework: openai
+  mode: local
   description: "Generates valid agents.yaml files using either LLM or code agents depending on the task."
   instructions: |
     You are an Agent YAML Generator. Given a list of agent names and descriptions, output a *single YAML file* with all agents, separated by `---`.
@@ -107,8 +107,8 @@ spec:
         app: <generate>
     spec:
       model: deepseek-r1:latest
-      framework: beeai
-      mode: remote
+      framework: openai
+      mode: local
       description: |
         <short summary of purpose>
       instructions: |
@@ -145,8 +145,8 @@ spec:
         app: generated
     spec:
       model: deepseek-r1:latest
-      framework: beeai
-      mode: remote
+      framework: openai
+      mode: local
       description: |
         Summarizes the given file’s contents.
       instructions: |

@@ -6,8 +6,8 @@ metadata:
     app: meta-agents-v2
 spec:
   model: deepseek-r1:latest
-  framework: beeai
-  mode: remote
+  framework: openai
+  mode: local
   description: |
     Generates a valid workflow.yaml by sequencing agents defined in agents.yaml.
     It infers execution order from the list and places the input prompt at the top.
