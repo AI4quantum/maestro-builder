@@ -26,7 +26,8 @@ A modern web-based interface for building Maestro agents and workflows using AI 
      ```bash
      uv run pip install -r api/requirements.txt
      ```
-
+   - Populate your .env file; needs to include OPENAI_API_KEY and OPENAI_BASE_URL
+   
 3. **Install frontend dependencies:**
    ```bash
    uv run npm install

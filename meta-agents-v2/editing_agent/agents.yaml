@@ -6,8 +6,8 @@ metadata:
     app: builder
 spec:
   model: deepseek-r1:latest
-  framework: beeai
-  mode: remote
+  framework: openai
+  mode: local
   description: |
     Edits the yaml file based on the user's input.
   instructions: |
