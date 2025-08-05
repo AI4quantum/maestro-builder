@@ -70,34 +70,37 @@ class ApiService {
 
   async sendMessage(message: string, chatId?: string): Promise<ChatResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat_builder_agent`, {
+      const response = await fetch(`${API_BASE_URL}/api/supervisor`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           content: message,
-          role: 'user',
           chat_id: chatId || this.currentChatId
-        } as ChatMessage & { chat_id?: string })
+        })
       })
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      const data: ChatResponse = await response.json()
-      
-      // Store the chat ID for future messages
+      const data = await response.json()
+  
       this.currentChatId = data.chat_id
       
-      // Ensure YAML files have proper formatting
-      data.yaml_files = data.yaml_files.map(file => ({
+      data.yaml_files = data.yaml_files.map((file: any) => ({
         ...file,
         content: this.formatYamlContent(file.content)
       }))
       
-      return data
+      const chatResponse: ChatResponse = {
+        response: data.response,
+        yaml_files: data.yaml_files,
+        chat_id: data.chat_id
+      }
+      
+      return chatResponse
     } catch (error) {
       console.error('Error sending message:', error)
       // Return a fallback response if API is not available
