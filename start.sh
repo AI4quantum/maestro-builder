@@ -74,6 +74,14 @@ EDITING_AGENT_PID=$!
 echo $EDITING_AGENT_PID > logs/editing_agent.pid
 print_success "Editing Agent backend started with PID: $EDITING_AGENT_PID (port 8002)"
 
+# Start Supervisor Agent backend (port 8005)
+SUPERVISOR_AGENT_CMD="maestro serve ./meta-agents-v2/supervisor_agent/agents.yaml ./meta-agents-v2/supervisor_agent/workflow.yaml --port 8005"
+print_status "Starting Supervisor Agent backend: $SUPERVISOR_AGENT_CMD"
+nohup $SUPERVISOR_AGENT_CMD > logs/supervisor_agent.log 2>&1 &
+SUPERVISOR_AGENT_PID=$!
+echo $SUPERVISOR_AGENT_PID > logs/supervisor_agent.pid
+print_success "Supervisor Agent backend started with PID: $SUPERVISOR_AGENT_PID (port 8005)"
+
 ### ───────────── Start API ─────────────
 
 print_status "Starting Maestro API service..."
@@ -176,6 +184,7 @@ echo "Services:"
 echo "  - Agent Generation Backend: http://localhost:8003"
 echo "  - Workflow Generation Backend: http://localhost:8004"
 echo "  - Editing Agent Backend: http://localhost:8002"
+echo "  - Supervisor Agent Backend: http://localhost:8005"
 echo "  - API: http://localhost:8001"
 echo "  - API Docs: http://localhost:8001/docs"
 echo "  - Builder Frontend: http://localhost:5174"
@@ -184,8 +193,9 @@ echo "Logs:"
 echo "  - Agent Generation: logs/maestro_agents.log"
 echo "  - Workflow Generation: logs/maestro_workflow.log"
 echo "  - Editing Agent: logs/editing_agent.log"
+echo "  - Supervisor Agent: logs/supervisor_agent.log"
 echo "  - API: logs/api.log"
 echo "  - Builder: logs/builder.log"
 echo ""
 echo "To stop all services, run: ./stop.sh"
-echo "To view logs: tail -f logs/api.log | tail -f logs/builder.log | tail -f logs/maestro_agents.log | tail -f logs/maestro_workflow.log | tail -f logs/editing_agent.log"
+echo "To view logs: tail -f logs/api.log | tail -f logs/builder.log | tail -f logs/maestro_agents.log | tail -f logs/maestro_workflow.log | tail -f logs/editing_agent.log | tail -f logs/supervisor_agent.log"
