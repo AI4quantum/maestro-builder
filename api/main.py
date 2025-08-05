@@ -21,6 +21,7 @@ import json
 import asyncio
 from pathlib import Path
 import httpx
+import requests
 
 # Initialize FastAPI app
 app = FastAPI(
