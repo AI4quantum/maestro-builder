@@ -23,6 +23,8 @@ from pathlib import Path
 import httpx
 import requests
 from enum import Enum
+import json
+from dataclasses import dataclass
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -111,6 +113,13 @@ class Intent(str, Enum):
     EDIT_YAML = "EDIT_YAML"
 
 
+@dataclass
+class Classification:
+    intent: Intent
+    confidence: float
+    reasoning: str
+
+
 class ClassifyUserRequest:
     """Encapsulates supervisor call and intent extraction."""
 
@@ -122,32 +131,44 @@ class ClassifyUserRequest:
         agents_yaml_content: str,
         workflow_yaml_content: str,
         timeout_seconds: int = 30,
-    ) -> Intent:
+    ) -> Classification:
         supervisor_prompt = self._build_prompt(
             user_input, agents_yaml_content, workflow_yaml_content
         )
-        print(f"Calling supervisor agent with prompt: {supervisor_prompt[:100]}...")
         resp = requests.post(
             self.SUPERVISOR_URL,
             json={"prompt": supervisor_prompt, "agent": "IntentClassifier"},
             timeout=timeout_seconds,
         )
-
-        print(f"Supervisor agent response status: {resp.status_code}")
         if resp.status_code != 200:
-            print(f"Supervisor agent error: {resp.text}")
             raise Exception(
                 f"Supervisor agent failed with status {resp.status_code}"
             )
 
         supervisor_response = resp.json().get("response", "")
-        print(f"Supervisor agent response: {supervisor_response[:200]}...")
-        return self._extract_intent(supervisor_response)
+
+        try:
+            parsed = json.loads(supervisor_response)
+            raw_intent = str(parsed.get("intent", "")).upper()
+            intent = (
+                Intent(raw_intent)
+                if raw_intent in (Intent.GENERATE_WORKFLOW.value, Intent.EDIT_YAML.value)
+                else Intent.GENERATE_WORKFLOW
+            )
+            confidence = float(parsed.get("confidence", 1.0))
+            reasoning = str(parsed.get("reasoning", ""))
+            return Classification(intent=intent, confidence=confidence, reasoning=reasoning)
+        except Exception:
+            return Classification(
+                intent=Intent.GENERATE_WORKFLOW,
+                confidence=0.5,
+                reasoning="Defaulted due to non-JSON supervisor output",
+            )
 
     def _build_prompt(
         self, user_input: str, agents_yaml_content: str, workflow_yaml_content: str
     ) -> str:
-        return f"""Analyze the user's input and classify their intent as either workflow generation or YAML editing.
+        return f"""You are an intent classifier. Determine if the user wants to GENERATE_WORKFLOW or EDIT_YAML.
 
 User input: {user_input}
 
@@ -158,17 +179,18 @@ Agents YAML:
 Workflow YAML:
 {workflow_yaml_content}
 
-Please classify the user's intent and return a JSON response with intent, confidence, and reasoning."""
+Return ONLY valid JSON (no prose, no markdown) with the following schema:
+{{
+  "intent": "GENERATE_WORKFLOW" | "EDIT_YAML",
+  "confidence": number,  // 0.0 to 1.0
+  "reasoning": string
+}}
 
-    def _extract_intent(self, response_text: str) -> Intent:
-        print(f"Processing supervisor response: {response_text[:200]}...")
-        if "GENERATE_WORKFLOW" in response_text:
-            return Intent.GENERATE_WORKFLOW
-        if "EDIT_YAML" in response_text:
-            return Intent.EDIT_YAML
-        return Intent.GENERATE_WORKFLOW
+Example valid responses:
+{{"intent":"GENERATE_WORKFLOW","confidence":0.92,"reasoning":"User is asking to create a new flow"}}
+{{"intent":"EDIT_YAML","confidence":0.87,"reasoning":"User wants to modify existing YAML"}}"""
 
-
+    
 def _extract_yaml_from_model_output(text: str) -> str:
     if "```yaml" in text:
         return text.split("```yaml", 1)[-1].split("```", 1)[0].strip()
@@ -253,6 +275,21 @@ def _generate_workflow_yaml(
         raise Exception(f"Workflow generation failed: {workflow_resp.text}")
     workflow_output = workflow_resp.json().get("response", "")
     return _extract_yaml_from_model_output(workflow_output)
+
+
+def _build_generation_success_text(user_request: str) -> str:
+    return (
+        "✅ Successfully generated both agents.yaml and workflow.yaml from your prompt!\n\n"
+        f"Your request: \"{user_request}\"\n\n"
+        "I've created:\n"
+        "• **agents.yaml** - Contains the agent definitions\n"
+        "• **workflow.yaml** - Contains the workflow that uses those agents\n\n"
+        "Both files are now available in the YAML panel on the right. You can switch between tabs to view each file."
+    )
+
+
+def _build_edit_success_text(file_to_edit: str, instruction: str) -> str:
+    return f"Successfully edited {file_to_edit} based on your request: {instruction}"
 
 # ---------------------------------------
 # Service Functions
@@ -704,7 +741,6 @@ async def delete_chat_session(chat_id: str):
 @app.post("/api/edit_yaml", response_model=EditYamlResponse)
 async def edit_yaml(request: EditYamlRequest):
     try:
-        # Build the prompt for the editing agent
         prompt = f"Current YAML file (type: {request.file_type}):\n{request.yaml}\n\nUser instruction: {request.instruction}\n\nPlease apply the requested edit and return only the updated YAML file."
         resp = requests.post(
             "http://localhost:8002/chat",
@@ -713,7 +749,6 @@ async def edit_yaml(request: EditYamlRequest):
         if resp.status_code != 200:
             raise Exception(resp.text)
         edited_yaml = resp.json().get("response", "")
-        # Remove markdown formatting if present
         if "```yaml" in edited_yaml:
             edited_yaml = (
                 edited_yaml.split("```yaml", 1)[-1].split("```", 1)[0].strip()
@@ -728,7 +763,6 @@ async def edit_yaml(request: EditYamlRequest):
 @app.post("/api/validate_yaml", response_model=ValidateYamlResponse)
 async def validate_yaml(request: ValidateYamlRequest):
     try:
-        # fix double-escaped characters
         import codecs
         unescaped_content = codecs.decode(request.yaml_content, 'unicode_escape')
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_file:
@@ -832,14 +866,14 @@ async def supervisor_route(request: SupervisorRequest):
                 print(f"Warning: Could not fetch YAML files for context: {e}")
         
         classifier = ClassifyUserRequest()
-        intent = classifier.classify(
+        classification = classifier.classify(
             request.content, agents_yaml_content, workflow_yaml_content
         )
-        print(f"Extracted intent: {intent}")
+        print(f"Extracted intent: {classification.intent} confidence={classification.confidence}")
 
-        if intent == Intent.EDIT_YAML:
+        if classification.intent == Intent.EDIT_YAML:
             if not agents_yaml_content and not workflow_yaml_content:
-                intent = Intent.GENERATE_WORKFLOW
+                classification.intent = Intent.GENERATE_WORKFLOW
             else:
                 file_to_edit = "agents.yaml" if agents_yaml_content else "workflow.yaml"
                 yaml_content = (
@@ -851,10 +885,10 @@ async def supervisor_route(request: SupervisorRequest):
                     instruction=request.content,
                 )
                 return SupervisorResponse(
-                    intent=intent.value,
-                    confidence=1.0,
-                    reasoning="Successfully routed to editing",
-                    response=f"Successfully edited {file_to_edit} based on your request: {request.content}",
+                    intent=classification.intent.value,
+                    confidence=float(classification.confidence),
+                    reasoning=classification.reasoning or "Successfully routed to editing",
+                    response=_build_edit_success_text(file_to_edit, request.content),
                     yaml_files=[{"name": file_to_edit, "content": edited_yaml}],
                     chat_id=request.chat_id or str(uuid.uuid4()),
                 )
@@ -868,21 +902,11 @@ async def supervisor_route(request: SupervisorRequest):
             print("Calling workflow generation on port 8004...")
             workflow_yaml = _generate_workflow_yaml(workflow_prompt)
 
-            clean_response = f"""✅ Successfully generated both agents.yaml and workflow.yaml from your prompt!
-
-Your request: "{request.content}"
-
-I've created:
-• **agents.yaml** - Contains the agent definitions
-• **workflow.yaml** - Contains the workflow that uses those agents
-
-Both files are now available in the YAML panel on the right. You can switch between tabs to view each file."""
-
             return SupervisorResponse(
                 intent=Intent.GENERATE_WORKFLOW.value,
-                confidence=1.0,
-                reasoning="Successfully routed to workflow generation",
-                response=clean_response,
+                confidence=float(classification.confidence) if classification else 1.0,
+                reasoning=classification.reasoning or "Successfully routed to workflow generation",
+                response=_build_generation_success_text(request.content),
                 yaml_files=[
                     {"name": "agents.yaml", "content": agents_yaml},
                     {"name": "workflow.yaml", "content": workflow_yaml},
