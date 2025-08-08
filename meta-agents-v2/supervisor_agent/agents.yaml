@@ -5,7 +5,7 @@ metadata:
   labels:
     app: supervisor-agent
 spec:
-  model: deepseek-r1:latest
+  model: gpt-oss:latest
   framework: openai
   mode: local
   description: |
@@ -40,15 +40,18 @@ spec:
     - Examples: "Change the model to gpt-4", "Fix the indentation", "Update the API key", "Change the temperature to 0.8", "Add a new agent", "Modify the workflow steps"
     
     Output Format:
-    Simply include the words "GENERATE_WORKFLOW" or "EDIT_YAML" in your response.
+    Return ONLY valid JSON (no prose, no markdown) with the following schema:
+    {
+      "intent": "GENERATE_WORKFLOW" | "EDIT_YAML",
+      "confidence": number,  // 0.0 to 1.0
+      "reasoning": string
+    }
     
     Examples:
-    - "Based on the user's request, this should be GENERATE_WORKFLOW"
-    - "This is an EDIT_YAML request"
-    - "GENERATE_WORKFLOW"
-    - "EDIT_YAML"
+    {"intent":"GENERATE_WORKFLOW","confidence":0.92,"reasoning":"User is asking to create a new workflow"}
+    {"intent":"EDIT_YAML","confidence":0.87,"reasoning":"User wants to modify existing YAML content"}
     
-    The system will automatically extract the intent from your response.
+    The system will parse this JSON and route the request accordingly.
     
     Guidelines:
     - Be conservative - if unsure, default to GENERATE_WORKFLOW
