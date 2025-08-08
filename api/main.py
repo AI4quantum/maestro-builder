@@ -22,6 +22,7 @@ import asyncio
 from pathlib import Path
 import httpx
 import requests
+from enum import Enum
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -104,6 +105,154 @@ class ValidateYamlResponse(BaseModel):
     is_valid: bool
     message: str
     errors: List[str] = []
+
+class Intent(str, Enum):
+    GENERATE_WORKFLOW = "GENERATE_WORKFLOW"
+    EDIT_YAML = "EDIT_YAML"
+
+
+class ClassifyUserRequest:
+    """Encapsulates supervisor call and intent extraction."""
+
+    SUPERVISOR_URL = "http://localhost:8005/chat"
+
+    def classify(
+        self,
+        user_input: str,
+        agents_yaml_content: str,
+        workflow_yaml_content: str,
+        timeout_seconds: int = 30,
+    ) -> Intent:
+        supervisor_prompt = self._build_prompt(
+            user_input, agents_yaml_content, workflow_yaml_content
+        )
+        print(f"Calling supervisor agent with prompt: {supervisor_prompt[:100]}...")
+        resp = requests.post(
+            self.SUPERVISOR_URL,
+            json={"prompt": supervisor_prompt, "agent": "IntentClassifier"},
+            timeout=timeout_seconds,
+        )
+
+        print(f"Supervisor agent response status: {resp.status_code}")
+        if resp.status_code != 200:
+            print(f"Supervisor agent error: {resp.text}")
+            raise Exception(
+                f"Supervisor agent failed with status {resp.status_code}"
+            )
+
+        supervisor_response = resp.json().get("response", "")
+        print(f"Supervisor agent response: {supervisor_response[:200]}...")
+        return self._extract_intent(supervisor_response)
+
+    def _build_prompt(
+        self, user_input: str, agents_yaml_content: str, workflow_yaml_content: str
+    ) -> str:
+        return f"""Analyze the user's input and classify their intent as either workflow generation or YAML editing.
+
+User input: {user_input}
+
+Current YAML files (if any):
+Agents YAML:
+{agents_yaml_content}
+
+Workflow YAML:
+{workflow_yaml_content}
+
+Please classify the user's intent and return a JSON response with intent, confidence, and reasoning."""
+
+    def _extract_intent(self, response_text: str) -> Intent:
+        print(f"Processing supervisor response: {response_text[:200]}...")
+        if "GENERATE_WORKFLOW" in response_text:
+            return Intent.GENERATE_WORKFLOW
+        if "EDIT_YAML" in response_text:
+            return Intent.EDIT_YAML
+        return Intent.GENERATE_WORKFLOW
+
+
+def _extract_yaml_from_model_output(text: str) -> str:
+    if "```yaml" in text:
+        return text.split("```yaml", 1)[-1].split("```", 1)[0].strip()
+    if "```" in text:
+        return text.split("```", 1)[-1].split("```", 1)[0].strip()
+    yaml_match = re.search(r"apiVersion:.*?(?=\n\n|\Z)", text, re.DOTALL)
+    return yaml_match.group(0).strip() if yaml_match else ""
+
+
+def _parse_agents_yaml_to_info(agents_yaml: str) -> List[Dict[str, str]]:
+    agents_info: List[Dict[str, str]] = []
+    try:
+        agent_blocks = agents_yaml.split("---")
+        for block in agent_blocks:
+            if block.strip():
+                agent_data = yaml.safe_load(block)
+                if (
+                    agent_data
+                    and "metadata" in agent_data
+                    and "name" in agent_data["metadata"]
+                ):
+                    name = agent_data["metadata"]["name"]
+                    description = agent_data.get("spec", {}).get("description", "")
+                    agents_info.append({"name": name, "description": description})
+    except yaml.YAMLError:
+        name_matches = re.findall(r"name:\s*(\w+)", agents_yaml)
+        desc_matches = re.findall(
+            r"description:\s*\|\s*\n\s*(.+?)(?=\n\s*\w+:|$)", agents_yaml, re.DOTALL
+        )
+        for i, name in enumerate(name_matches):
+            description = desc_matches[i] if i < len(desc_matches) else ""
+            agents_info.append({"name": name, "description": description.strip()})
+    return agents_info
+
+
+def _build_workflow_prompt(agents_info: List[Dict[str, str]], user_input: str) -> str:
+    workflow_prompt = "Create a workflow that uses the following agents:\n\n"
+    for i, agent in enumerate(agents_info, 1):
+        workflow_prompt += f"agent{i}: {agent['name']} – {agent['description']}\n"
+    workflow_prompt += f"\nprompt: {user_input}"
+    return workflow_prompt
+
+
+def _edit_yaml(
+    yaml_content: str, file_to_edit: str, instruction: str, timeout_seconds: int = 30
+) -> str:
+    edit_resp = requests.post(
+        "http://localhost:8001/api/edit_yaml",
+        json={
+            "yaml": yaml_content,
+            "instruction": instruction,
+            "file_type": file_to_edit.split(".")[0],
+        },
+        timeout=timeout_seconds,
+    )
+    if edit_resp.status_code != 200:
+        raise Exception("Editing agent failed")
+    return edit_resp.json().get("edited_yaml", "")
+
+
+def _generate_agents_yaml(user_input: str, timeout_seconds: int = 120) -> str:
+    agents_resp = requests.post(
+        "http://localhost:8003/chat",
+        json={"prompt": user_input, "agent": "TaskInterpreter"},
+        timeout=timeout_seconds,
+    )
+    if agents_resp.status_code != 200:
+        raise Exception(f"Agents generation failed: {agents_resp.text}")
+    agents_output = agents_resp.json().get("response", "")
+    return _extract_yaml_from_model_output(agents_output)
+
+
+def _generate_workflow_yaml(
+    workflow_prompt: str, timeout_seconds: int = 120
+) -> str:
+    workflow_resp = requests.post(
+        "http://localhost:8004/chat",
+        json={"prompt": workflow_prompt, "agent": "WorkflowYAMLBuilder"},
+        timeout=timeout_seconds,
+    )
+    if workflow_resp.status_code != 200:
+        raise Exception(f"Workflow generation failed: {workflow_resp.text}")
+    workflow_output = workflow_resp.json().get("response", "")
+    return _extract_yaml_from_model_output(workflow_output)
 
 # ---------------------------------------
 # Service Functions
@@ -682,168 +831,44 @@ async def supervisor_route(request: SupervisorRequest):
             except Exception as e:
                 print(f"Warning: Could not fetch YAML files for context: {e}")
         
-        supervisor_prompt = f"""Analyze the user's input and classify their intent as either workflow generation or YAML editing.
-
-User input: {request.content}
-
-Current YAML files (if any):
-Agents YAML:
-{agents_yaml_content}
-
-Workflow YAML:
-{workflow_yaml_content}
-
-Please classify the user's intent and return a JSON response with intent, confidence, and reasoning."""
-
-        print(f"Calling supervisor agent with prompt: {supervisor_prompt[:100]}...")
-        resp = requests.post(
-            "http://localhost:8005/chat",
-            json={
-                "prompt": supervisor_prompt,
-                "agent": "IntentClassifier"
-            },
-            timeout=30
+        classifier = ClassifyUserRequest()
+        intent = classifier.classify(
+            request.content, agents_yaml_content, workflow_yaml_content
         )
-        
-        print(f"Supervisor agent response status: {resp.status_code}")
-        if resp.status_code != 200:
-            print(f"Supervisor agent error: {resp.text}")
-            raise Exception(f"Supervisor agent failed with status {resp.status_code}")
-        
-        supervisor_response = resp.json().get("response", "")
-        print(f"Supervisor agent response: {supervisor_response[:200]}...")
-        
-        def extract_intent_from_response(response_text):
-            """Extract intent from supervisor response, handling any format"""
-            print(f"Processing supervisor response: {response_text[:200]}...")
-            if "GENERATE_WORKFLOW" in response_text:
-                return "GENERATE_WORKFLOW"
-            elif "EDIT_YAML" in response_text:
-                return "EDIT_YAML"
-            else:
-                return "GENERATE_WORKFLOW"
-        
-        intent = extract_intent_from_response(supervisor_response)
         print(f"Extracted intent: {intent}")
-        
-        # Route to appropriate endpoint based on intent
-        if intent == "EDIT_YAML":
+
+        if intent == Intent.EDIT_YAML:
             if not agents_yaml_content and not workflow_yaml_content:
-                intent = "GENERATE_WORKFLOW"
-            
-            if intent == "EDIT_YAML":
+                intent = Intent.GENERATE_WORKFLOW
+            else:
                 file_to_edit = "agents.yaml" if agents_yaml_content else "workflow.yaml"
-                yaml_content = agents_yaml_content if agents_yaml_content else workflow_yaml_content
-                edit_resp = requests.post(
-                    "http://localhost:8001/api/edit_yaml",
-                    json={
-                        "yaml": yaml_content,
-                        "instruction": request.content,
-                        "file_type": file_to_edit.split('.')[0]  # 'agents' or 'workflow'
-                    },
-                    timeout=30
+                yaml_content = (
+                    agents_yaml_content if agents_yaml_content else workflow_yaml_content
                 )
-                
-                if edit_resp.status_code == 200:
-                    edit_data = edit_resp.json()
-                    return SupervisorResponse(
-                        intent=intent,
-                        confidence=1.0,
-                        reasoning="Successfully routed to editing",
-                        response=f"Successfully edited {file_to_edit} based on your request: {request.content}",
-                        yaml_files=[{
-                            "name": file_to_edit,
-                            "content": edit_data["edited_yaml"]
-                        }],
-                        chat_id=request.chat_id or str(uuid.uuid4())
-                    )
-                else:
-                    intent = "GENERATE_WORKFLOW"
-        
-        if intent == "GENERATE_WORKFLOW":
-            print("Routing to workflow generation...")
-            try:
-                print("Calling agent generation on port 8003...")
-                agents_resp = requests.post(
-                    "http://localhost:8003/chat",
-                    json={"prompt": request.content, "agent": "TaskInterpreter"},
-                    timeout=120
+                edited_yaml = _edit_yaml(
+                    yaml_content=yaml_content,
+                    file_to_edit=file_to_edit,
+                    instruction=request.content,
                 )
-                print(f"Agent generation response status: {agents_resp.status_code}")
-                if agents_resp.status_code != 200:
-                    print(f"Agent generation error: {agents_resp.text}")
-                    raise Exception(f"Agents generation failed: {agents_resp.text}")
-
-                agents_output = agents_resp.json().get("response", "")
-                print(f"Agent generation output length: {len(agents_output)}")
-                agents_yaml = ""
-                if "```yaml" in agents_output:
-                    agents_yaml = (
-                        agents_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
-                    )
-                elif "```" in agents_output:
-                    agents_yaml = agents_output.split("```", 1)[-1].split("```", 1)[0].strip()
-                else:
-                    yaml_match = re.search(r'apiVersion:.*?(?=\n\n|\Z)', agents_output, re.DOTALL)
-                    if yaml_match:
-                        agents_yaml = yaml_match.group(0).strip()
-                agents_info = []
-                try:
-                    agent_blocks = agents_yaml.split('---')
-                    for block in agent_blocks:
-                        if block.strip():
-                            agent_data = yaml.safe_load(block)
-                            if agent_data and 'metadata' in agent_data and 'name' in agent_data['metadata']:
-                                name = agent_data['metadata']['name']
-                                description = agent_data.get('spec', {}).get('description', '')
-                                agents_info.append({
-                                    'name': name,
-                                    'description': description
-                                })
-                except yaml.YAMLError:
-                    name_matches = re.findall(r'name:\s*(\w+)', agents_yaml)
-                    desc_matches = re.findall(r'description:\s*\|\s*\n\s*(.+?)(?=\n\s*\w+:|$)', agents_yaml, re.DOTALL)
-                    
-                    for i, name in enumerate(name_matches):
-                        description = desc_matches[i] if i < len(desc_matches) else ""
-                        agents_info.append({
-                            'name': name,
-                            'description': description.strip()
-                        })
-
-                workflow_prompt = f"Create a workflow that uses the following agents:\n\n"
-                for i, agent in enumerate(agents_info, 1):
-                    workflow_prompt += f"agent{i}: {agent['name']} – {agent['description']}\n"
-                workflow_prompt += f"\nprompt: {request.content}"
-
-                print("Calling workflow generation on port 8004...")
-                workflow_resp = requests.post(
-                    "http://localhost:8004/chat",
-                    json={"prompt": workflow_prompt, "agent": "WorkflowYAMLBuilder"},
-                    timeout=120
+                return SupervisorResponse(
+                    intent=intent.value,
+                    confidence=1.0,
+                    reasoning="Successfully routed to editing",
+                    response=f"Successfully edited {file_to_edit} based on your request: {request.content}",
+                    yaml_files=[{"name": file_to_edit, "content": edited_yaml}],
+                    chat_id=request.chat_id or str(uuid.uuid4()),
                 )
-                print(f"Workflow generation response status: {workflow_resp.status_code}")
-                if workflow_resp.status_code != 200:
-                    print(f"Workflow generation error: {workflow_resp.text}")
-                    raise Exception(f"Workflow generation failed: {workflow_resp.text}")
 
-                workflow_output = workflow_resp.json().get("response", "")
-                print(f"Workflow generation output length: {len(workflow_output)}")
-                workflow_yaml = ""
-                if "```yaml" in workflow_output:
-                    workflow_yaml = (
-                        workflow_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
-                    )
-                elif "```" in workflow_output:
-                    workflow_yaml = workflow_output.split("```", 1)[-1].split("```", 1)[0].strip()
-                else:
-                    yaml_match = re.search(r'apiVersion:.*?(?=\n\n|\Z)', workflow_output, re.DOTALL)
-                    if yaml_match:
-                        workflow_yaml = yaml_match.group(0).strip()
-                
-                print(f"Extracted workflow YAML length: {len(workflow_yaml)}")
+        print("Routing to workflow generation...")
+        try:
+            print("Calling agent generation on port 8003...")
+            agents_yaml = _generate_agents_yaml(request.content)
+            agents_info = _parse_agents_yaml_to_info(agents_yaml)
+            workflow_prompt = _build_workflow_prompt(agents_info, request.content)
+            print("Calling workflow generation on port 8004...")
+            workflow_yaml = _generate_workflow_yaml(workflow_prompt)
 
-                clean_response = f"""✅ Successfully generated both agents.yaml and workflow.yaml from your prompt!
+            clean_response = f"""✅ Successfully generated both agents.yaml and workflow.yaml from your prompt!
 
 Your request: "{request.content}"
 
@@ -853,19 +878,19 @@ I've created:
 
 Both files are now available in the YAML panel on the right. You can switch between tabs to view each file."""
 
-                return SupervisorResponse(
-                    intent=intent,
-                    confidence=1.0,
-                    reasoning="Successfully routed to workflow generation",
-                    response=clean_response,
-                    yaml_files=[
-                        {"name": "agents.yaml", "content": agents_yaml},
-                        {"name": "workflow.yaml", "content": workflow_yaml}
-                    ],
-                    chat_id=request.chat_id or str(uuid.uuid4())
-                )
-            except Exception as e:
-                raise Exception(f"Workflow generation failed: {str(e)}")
+            return SupervisorResponse(
+                intent=Intent.GENERATE_WORKFLOW.value,
+                confidence=1.0,
+                reasoning="Successfully routed to workflow generation",
+                response=clean_response,
+                yaml_files=[
+                    {"name": "agents.yaml", "content": agents_yaml},
+                    {"name": "workflow.yaml", "content": workflow_yaml},
+                ],
+                chat_id=request.chat_id or str(uuid.uuid4()),
+            )
+        except Exception as e:
+            raise Exception(f"Workflow generation failed: {str(e)}")
         
     except Exception as e:
         print(f"Error in supervisor routing: {str(e)}")
