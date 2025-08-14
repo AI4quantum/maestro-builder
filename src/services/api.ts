@@ -14,6 +14,22 @@ export interface ChatResponse {
   chat_id: string
 }
 
+export type StreamEvent =
+  | { type: 'chat_id'; chat_id: string }
+  | { type: 'status'; message: string }
+  | { type: 'agents_yaml'; file: { name: string; content: string }; chat_id?: string }
+  | { type: 'workflow_yaml'; file: { name: string; content: string }; chat_id?: string }
+  | { type: 'final'; response: string; yaml_files: Array<{ name: string; content: string }>; chat_id: string }
+  | { type: 'error'; message: string }
+  | { type: 'done' }
+  | { type: 'ai_output'; source: 'agents' | 'workflow'; line: string }
+
+export interface StreamHandlers {
+  onEvent?: (event: StreamEvent) => void
+  onError?: (error: Error) => void
+  onComplete?: () => void
+}
+
 export interface YamlFile {
   name: string
   content: string
@@ -173,6 +189,76 @@ class ApiService {
     } catch (error) {
       console.error('Error sending complete message:', error)
       return this.getFallbackResponse(message)
+    }
+  }
+
+  async streamCompleteMessage(message: string, handlers: StreamHandlers = {}, chatId?: string): Promise<void> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chat_builder_complete_stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: message,
+          role: 'user',
+          chat_id: chatId || this.currentChatId
+        } as ChatMessage & { chat_id?: string })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      if (!response.body) {
+        throw new Error('No response body for streaming request')
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        let lineBreakIndex: number
+        while ((lineBreakIndex = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, lineBreakIndex).trim()
+          buffer = buffer.slice(lineBreakIndex + 1)
+          if (!line) continue
+          try {
+            const event = JSON.parse(line) as StreamEvent
+            if (event.type === 'final') {
+              this.currentChatId = event.chat_id
+            } else if (event.type === 'chat_id') {
+              this.currentChatId = event.chat_id
+            }
+            handlers.onEvent?.(event)
+          } catch (e) {
+            console.error('Failed to parse stream line:', line, e)
+          }
+        }
+      }
+      const last = buffer.trim()
+      if (last) {
+        try {
+          const event = JSON.parse(last) as StreamEvent
+          handlers.onEvent?.(event)
+        } catch (e) {
+        }
+      }
+
+      handlers.onComplete?.()
+    } catch (error) {
+      console.error('Error streaming complete message:', error)
+      handlers.onError?.(error as Error)
+      try {
+        const fallback = await this.sendCompleteMessage(message, chatId)
+        handlers.onEvent?.({ type: 'final', response: fallback.response, yaml_files: fallback.yaml_files, chat_id: fallback.chat_id })
+        handlers.onEvent?.({ type: 'done' })
+        handlers.onComplete?.()
+      } catch (_) {
+      }
     }
   }
 
@@ -342,6 +428,24 @@ class ApiService {
 
   setCurrentChatId(chatId: string | null) {
     this.currentChatId = chatId
+  }
+
+  streamLogs(source: 'agents' | 'workflow' = 'agents', fromStart = false, onEvent: (data: { type: string; source?: string; line?: string; message?: string }) => void): () => void {
+    const url = `${API_BASE_URL}/api/stream_logs?source=${encodeURIComponent(source)}&from_start=${fromStart ? 'true' : 'false'}`
+    const es = new EventSource(url)
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        onEvent(data)
+      } catch (err) {
+        console.error('Failed to parse SSE message', err)
+      }
+    }
+    es.onerror = (e) => {
+      console.error('SSE error', e)
+      es.close()
+    }
+    return () => es.close()
   }
 
   private formatYamlContent(content: string): string {
