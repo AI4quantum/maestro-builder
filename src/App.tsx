@@ -3,7 +3,7 @@ import { Sidebar } from './components/Sidebar'
 import { ChatCanvas } from './components/ChatCanvas'
 import { YamlPanel } from './components/YamlPanel'
 import { ChatInput } from './components/ChatInput'
-import { apiService, type ChatSession, type ChatHistory } from './services/api'
+import { apiService, type ChatHistory, type StreamEvent } from './services/api'
 import axios from 'axios'
 
 export interface Message {
@@ -46,6 +46,7 @@ function App() {
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([])
   const [activeYamlTab, setActiveYamlTab] = useState<'agents.yaml' | 'workflow.yaml'>('agents.yaml');
+  const [streamingEnabled, setStreamingEnabled] = useState(true);
 
   // Load chat history on component mount
   useEffect(() => {
@@ -175,7 +176,7 @@ function App() {
     }
   }
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, useStreaming: boolean = true) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -186,77 +187,111 @@ function App() {
     setMessages(prev => [...prev, userMessage])
     setIsLoading(true)
 
+    // Create a dedicated live log/status message
+    const assistantLogId = (Date.now() + 1).toString()
+    setMessages(prev => [...prev, {
+      id: assistantLogId,
+      role: 'assistant',
+      content: 'Starting…',
+      timestamp: new Date()
+    }])
+
+    const mergeYaml = (incoming: { name: string; content: string }) => {
+      setYamlFiles(prev => {
+        const exists = prev.find(f => f.name === incoming.name)
+        if (exists) {
+          return prev.map(f => f.name === incoming.name ? { ...f, content: incoming.content } : f)
+        }
+        return [...prev, { name: incoming.name, content: incoming.content, language: 'yaml' }]
+      })
+    }
+
+    // Start log streaming scoped to this run
+    const closeAgentsLogs = apiService.streamLogs('agents', false, data => {
+      if (data.type === 'log' && data.line) {
+        const line = data.line as string
+        setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: m.content ? `${m.content}\n${line}` : line } : m))
+      }
+    })
+    const closeWorkflowLogs = apiService.streamLogs('workflow', false, data => {
+      if (data.type === 'log' && data.line) {
+        const line = data.line as string
+        setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: m.content ? `${m.content}\n${line}` : line } : m))
+      }
+    })
+
     try {
-      // Use the complete endpoint to generate both agents and workflow
-      const apiResponse = await apiService.sendCompleteMessage(content, currentChatId || undefined);
-
-      // Parse AI response (final_prompt if available)
-      let parsedText = apiResponse.response
-      try {
-        const parsedJSON = JSON.parse(parsedText)
-        if (parsedJSON.final_prompt) {
-          parsedText = parsedJSON.final_prompt
-        }
-      } catch (e) {
-        // Not JSON — ignore
-      }
-
-      // Don't strip YAML code blocks from the response text since we want to show the full response
-      // The YAML files are handled separately in the yaml_files array
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: parsedText,
-        role: 'assistant',
-        timestamp: new Date()
-      }
-
-      setMessages(prev => [...prev, assistantMessage])
-
-      // Update YAML files from API response, ensuring both files are updated
-      const updatedYamlFiles = yamlFiles.map(file => {
-        const apiFile = apiResponse.yaml_files.find(apiFile => apiFile.name === file.name)
-        if (apiFile) {
-          return {
-            ...file,
-            content: apiFile.content
+      if (useStreaming) {
+        await apiService.streamGenerateMessage(content, {
+        onEvent: async (event: StreamEvent) => {
+          if (event.type === 'status') {
+            setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: m.content ? `${m.content}\n… ${event.message}` : `… ${event.message}` } : m))
           }
+          if (event.type === 'chat_id') {
+            if (event.chat_id !== currentChatId) {
+              setCurrentChatId(event.chat_id)
+              await loadChatHistory()
+            }
+          }
+          if (event.type === 'agents_yaml' || event.type === 'workflow_yaml') {
+            mergeYaml(event.file)
+          }
+          if (event.type === 'ai_output') {
+            const line = event.line
+            setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: m.content ? `${m.content}\n${line}` : line } : m))
+          }
+          if (event.type === 'final') {
+            // Add a new assistant message with final content
+            let parsedText = event.response
+            try {
+              const parsedJSON = JSON.parse(parsedText as string)
+              if ((parsedJSON as any).final_prompt) parsedText = (parsedJSON as any).final_prompt
+            } catch {}
+            setMessages(prev => [...prev, { id: String(Date.now() + 2), role: 'assistant', content: parsedText, timestamp: new Date() }])
+            // Ensure YAML files reflect final payload
+            event.yaml_files.forEach(file => mergeYaml(file))
+            if (event.chat_id !== currentChatId) {
+              setCurrentChatId(event.chat_id)
+              await loadChatHistory()
+            }
+          }
+          if (event.type === 'error') {
+            setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: `${m.content}\nError: ${event.message}` } : m))
+          }
+        },
+        onError: (err: Error) => {
+          console.error('Streaming error:', err)
+        },
+        onComplete: () => {
+          setIsLoading(false)
+          // Close scoped log streams
+          closeAgentsLogs()
+          closeWorkflowLogs()
         }
-        return file
-      })
-
-      apiResponse.yaml_files.forEach(apiFile => {
-        const existingFile = updatedYamlFiles.find(file => file.name === apiFile.name)
-        if (!existingFile) {
-          updatedYamlFiles.push({
-            name: apiFile.name,
-            content: apiFile.content,
-            language: 'yaml' as const
-          })
+      }, currentChatId || undefined)
+      } else {
+        const response = await apiService.sendGenerateMessage(content, currentChatId || undefined)
+        response.yaml_files.forEach(file => mergeYaml(file))
+        setMessages(prev => [...prev, { 
+          id: String(Date.now() + 2), 
+          role: 'assistant', 
+          content: response.response, 
+          timestamp: new Date() 
+        }])
+        if (response.chat_id !== currentChatId) {
+          setCurrentChatId(response.chat_id)
+          await loadChatHistory()
         }
-      })
-
-      setYamlFiles(updatedYamlFiles)
-
-      // Update current chat ID if this is a new session
-      if (apiResponse.chat_id !== currentChatId) {
-        setCurrentChatId(apiResponse.chat_id)
-        await loadChatHistory()
+        setIsLoading(false)
+        closeAgentsLogs()
+        closeWorkflowLogs()
       }
-
     } catch (error) {
-      console.error('Error sending message:', error)
-      
-      // Add error message
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Sorry, I encountered an error while processing your request. Please try again.',
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, errorMessage])
-    } finally {
+      console.error('Error processing message:', error)
+      setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: `${m.content}\nSorry, I encountered an error while processing your request. Please try again.` } : m))
       setIsLoading(false)
+      closeAgentsLogs()
+      closeWorkflowLogs()
     }
   }
 
@@ -335,7 +370,13 @@ function App() {
         </div>
         {/* Chat Input */}
         <div className="border-t border-gray-100 p-6 shrink-0">
-          <ChatInput onSendMessage={handleSendMessage} onEditYaml={handleEditYaml} disabled={isLoading} />
+          <ChatInput 
+          onSendMessage={handleSendMessage}
+          onEditYaml={handleEditYaml}
+          disabled={isLoading}
+          streamingEnabled={streamingEnabled}
+          onToggleStreaming={setStreamingEnabled}
+        />
         </div>
       </div>
 

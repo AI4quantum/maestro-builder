@@ -4,6 +4,7 @@ A FastAPI application to support the Maestro Builder frontend application.
 """
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
@@ -11,12 +12,15 @@ from datetime import datetime
 from api.ai_agent import MaestroBuilderAgent
 from api.database import Database
 import uuid
-import requests
 import subprocess
 import tempfile
 import os
 import yaml
 import re
+import json
+import asyncio
+from pathlib import Path
+import httpx
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -40,6 +44,9 @@ app.add_middleware(
 # Initialize agent + database
 ai_agent = MaestroBuilderAgent()
 db = Database()
+
+
+
 
 
 # ---------------------------------------
@@ -98,6 +105,113 @@ class ValidateYamlResponse(BaseModel):
     errors: List[str] = []
 
 # ---------------------------------------
+# Service Functions
+# ---------------------------------------
+async def generate_agents_yaml(prompt: str) -> tuple[str, str]:
+    """Generate agents.yaml content from user prompt."""
+    async with httpx.AsyncClient(timeout=120) as client:
+        agents_resp = await client.post(
+            "http://localhost:8003/chat",
+            json={"prompt": prompt, "agent": "TaskInterpreter"},
+        )
+    
+    if agents_resp.status_code != 200:
+        raise Exception(f"Agents generation failed: {agents_resp.text}")
+
+    agents_output = agents_resp.json().get("response", "")
+    agents_yaml = ""
+    
+    if "```yaml" in agents_output:
+        agents_yaml = (
+            agents_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
+        )
+    elif "```" in agents_output:
+        agents_yaml = agents_output.split("```", 1)[-1].split("```", 1)[0].strip()
+    else:
+        yaml_match = re.search(r"apiVersion:.*?(?=\n\n|\Z)", agents_output, re.DOTALL)
+        if yaml_match:
+            agents_yaml = yaml_match.group(0).strip()
+    
+    return agents_output, agents_yaml
+
+
+async def generate_workflow_yaml(agents_yaml: str, user_prompt: str) -> tuple[str, str]:
+    """Generate workflow.yaml content based on agents and user prompt."""
+    # Parse agents to build workflow prompt
+    agents_info: List[Dict[str, str]] = []
+    try:
+        agent_blocks = agents_yaml.split('---')
+        for block in agent_blocks:
+            if block.strip():
+                agent_data = yaml.safe_load(block)
+                if agent_data and 'metadata' in agent_data and 'name' in agent_data['metadata']:
+                    name = agent_data['metadata']['name']
+                    description = agent_data.get('spec', {}).get('description', '')
+                    agents_info.append({'name': name, 'description': description})
+    except yaml.YAMLError:
+        name_matches = re.findall(r'name:\s*(\w+)', agents_yaml)
+        desc_matches = re.findall(r'description:\s*\|\s*\n\s*(.+?)(?=\n\s*\w+:|$)', agents_yaml, re.DOTALL)
+        for i, name in enumerate(name_matches):
+            description = desc_matches[i] if i < len(desc_matches) else ""
+            agents_info.append({'name': name, 'description': description.strip()})
+
+    workflow_prompt = f"Create a workflow that uses the following agents:\n\n"
+    for i, agent in enumerate(agents_info, 1):
+        workflow_prompt += f"agent{i}: {agent['name']} – {agent['description']}\n"
+    workflow_prompt += f"\nprompt: {user_prompt}"
+
+    async with httpx.AsyncClient(timeout=180) as client:
+        workflow_resp = await client.post(
+            "http://localhost:8004/chat",
+            json={"prompt": workflow_prompt, "agent": "WorkflowYAMLBuilder"},
+        )
+    
+    if workflow_resp.status_code != 200:
+        raise Exception(f"Workflow generation failed: {workflow_resp.text}")
+
+    workflow_output = workflow_resp.json().get("response", "")
+    workflow_yaml = ""
+    
+    if "```yaml" in workflow_output:
+        workflow_yaml = (
+            workflow_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
+        )
+    elif "```" in workflow_output:
+        workflow_yaml = workflow_output.split("```", 1)[-1].split("```", 1)[0].strip()
+    else:
+        yaml_match = re.search(r"apiVersion:.*?(?=\n\n|\Z)", workflow_output, re.DOTALL)
+        if yaml_match:
+            workflow_yaml = yaml_match.group(0).strip()
+    
+    return workflow_output, workflow_yaml
+
+
+def create_final_response(user_prompt: str, agents_yaml: str, workflow_yaml: str) -> str:
+    """Create the final response message for the user."""
+    return f"""✅ Successfully generated both agents.yaml and workflow.yaml from your prompt!
+
+Your request: "{user_prompt}"
+
+I've created:
+• **agents.yaml** - Contains the agent definitions
+• **workflow.yaml** - Contains the workflow that uses those agents
+
+Both files are now available in the YAML panel on the right. You can switch between tabs to view each file."""
+
+
+async def generate_complete_workflow(message: ChatMessage) -> tuple[str, List[Dict[str, str]], str]:
+    """Main function to generate both agents and workflow YAMLs."""
+    agents_output, agents_yaml = await generate_agents_yaml(message.content)
+    workflow_output, workflow_yaml = await generate_workflow_yaml(agents_yaml, message.content)
+    final_response = create_final_response(message.content, agents_yaml, workflow_yaml)
+    yaml_files = [
+        {"name": "agents.yaml", "content": agents_yaml},
+        {"name": "workflow.yaml", "content": workflow_yaml},
+    ]
+    return final_response, yaml_files, str(uuid.uuid4())
+
+
+# ---------------------------------------
 # Routes
 # ---------------------------------------
 
@@ -110,25 +224,10 @@ async def root():
 @app.post("/api/chat_builder_agent", response_model=ChatResponse)
 async def chat_builder_agent(message: ChatMessage):
     try:
-        resp = requests.post(
-            "http://localhost:8003/chat",
-            json={"prompt": message.content, "agent": "TaskInterpreter"},
-        )
-        if resp.status_code != 200:
-            raise Exception(resp.text)
-
-        full_output = resp.json().get("response", "")
-        extracted_yaml = ""
-        if "```yaml" in full_output:
-            extracted_yaml = (
-                full_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
-            )
-        elif "```" in full_output:
-            extracted_yaml = full_output.split("```", 1)[-1].split("```", 1)[0].strip()
-
+        agents_output, agents_yaml = await generate_agents_yaml(message.content)
         return {
-            "response": full_output,
-            "yaml_files": [{"name": "agents.yaml", "content": extracted_yaml}],
+            "response": agents_output,
+            "yaml_files": [{"name": "agents.yaml", "content": agents_yaml}],
             "chat_id": str(uuid.uuid4()),
         }
     except Exception as e:
@@ -138,130 +237,213 @@ async def chat_builder_agent(message: ChatMessage):
 @app.post("/api/chat_builder_workflow", response_model=ChatResponse)
 async def chat_builder_workflow(message: ChatMessage):
     try:
-        resp = requests.post(
-            "http://localhost:8004/chat",
-            json={"prompt": message.content, "agent": "WorkflowYAMLBuilder"},
-        )
-        if resp.status_code != 200:
-            raise Exception(resp.text)
-
-        full_output = resp.json().get("response", "")
-        extracted_yaml = ""
-        if "```yaml" in full_output:
-            extracted_yaml = (
-                full_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
-            )
-        elif "```" in full_output:
-            extracted_yaml = full_output.split("```", 1)[-1].split("```", 1)[0].strip()
-
+        simple_agents_yaml = """apiVersion: v1
+kind: Agent
+metadata:
+  name: placeholder
+spec:
+  description: Placeholder agent for workflow generation
+---
+"""
+        workflow_output, workflow_yaml = await generate_workflow_yaml(simple_agents_yaml, message.content)
         return {
-            "response": full_output,
-            "yaml_files": [{"name": "workflow.yaml", "content": extracted_yaml}],
+            "response": workflow_output,
+            "yaml_files": [{"name": "workflow.yaml", "content": workflow_yaml}],
             "chat_id": str(uuid.uuid4()),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Workflow Builder failed: {e}")
 
 
-@app.post("/api/chat_builder_complete", response_model=ChatResponse)
-async def chat_builder_complete(message: ChatMessage):
+@app.post("/api/generate", response_model=ChatResponse)
+async def generate(message: ChatMessage):
     """
     Generate both agents.yaml and workflow.yaml from a single user prompt.
     First generates agents, then parses them to create a workflow prompt.
     """
     try:
-        agents_resp = requests.post(
-            "http://localhost:8003/chat",
-            json={"prompt": message.content, "agent": "TaskInterpreter"},
-        )
-        if agents_resp.status_code != 200:
-            raise Exception(f"Agents generation failed: {agents_resp.text}")
-
-        agents_output = agents_resp.json().get("response", "")
-        agents_yaml = ""
-        if "```yaml" in agents_output:
-            agents_yaml = (
-                agents_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
-            )
-        elif "```" in agents_output:
-            agents_yaml = agents_output.split("```", 1)[-1].split("```", 1)[0].strip()
-        else:
-
-            yaml_match = re.search(r'apiVersion:.*?(?=\n\n|\Z)', agents_output, re.DOTALL)
-            if yaml_match:
-                agents_yaml = yaml_match.group(0).strip()
-
-        agents_info = []
-        try:
-            agent_blocks = agents_yaml.split('---')
-            for block in agent_blocks:
-                if block.strip():
-                    agent_data = yaml.safe_load(block)
-                    if agent_data and 'metadata' in agent_data and 'name' in agent_data['metadata']:
-                        name = agent_data['metadata']['name']
-                        description = agent_data.get('spec', {}).get('description', '')
-                        agents_info.append({
-                            'name': name,
-                            'description': description
-                        })
-        except yaml.YAMLError:
-
-            name_matches = re.findall(r'name:\s*(\w+)', agents_yaml)
-            desc_matches = re.findall(r'description:\s*\|\s*\n\s*(.+?)(?=\n\s*\w+:|$)', agents_yaml, re.DOTALL)
-            
-            for i, name in enumerate(name_matches):
-                description = desc_matches[i] if i < len(desc_matches) else ""
-                agents_info.append({
-                    'name': name,
-                    'description': description.strip()
-                })
-
-        workflow_prompt = f"Create a workflow that uses the following agents:\n\n"
-        for i, agent in enumerate(agents_info, 1):
-            workflow_prompt += f"agent{i}: {agent['name']} – {agent['description']}\n"
-        workflow_prompt += f"\nprompt: {message.content}"
-
-
-        workflow_resp = requests.post(
-            "http://localhost:8004/chat",
-            json={"prompt": workflow_prompt, "agent": "WorkflowYAMLBuilder"},
-        )
-        if workflow_resp.status_code != 200:
-            raise Exception(f"Workflow generation failed: {workflow_resp.text}")
-
-        workflow_output = workflow_resp.json().get("response", "")
-        workflow_yaml = ""
-        if "```yaml" in workflow_output:
-            workflow_yaml = (
-                workflow_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
-            )
-        elif "```" in workflow_output:
-            workflow_yaml = workflow_output.split("```", 1)[-1].split("```", 1)[0].strip()
-        else:
-            yaml_match = re.search(r'apiVersion:.*?(?=\n\n|\Z)', workflow_output, re.DOTALL)
-            if yaml_match:
-                workflow_yaml = yaml_match.group(0).strip()
-
-        clean_response = f"""✅ Successfully generated both agents.yaml and workflow.yaml from your prompt!
-
-Your request: "{message.content}"
-
-I've created:
-• **agents.yaml** - Contains the agent definitions
-• **workflow.yaml** - Contains the workflow that uses those agents
-
-Both files are now available in the YAML panel on the right. You can switch between tabs to view each file."""
-
+        final_response, yaml_files, chat_id = await generate_complete_workflow(message)
         return {
-            "response": clean_response,
-            "yaml_files": [
-                {"name": "agents.yaml", "content": agents_yaml},
-                {"name": "workflow.yaml", "content": workflow_yaml}
-            ],
-            "chat_id": str(uuid.uuid4()),
+            "response": final_response,
+            "yaml_files": yaml_files,
+            "chat_id": chat_id,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Complete Builder failed: {e}")
+
+
+@app.post("/api/generate/stream")
+async def generate_stream(message: ChatMessage):
+    """
+    Streaming variant of generate that emits newline-delimited JSON (NDJSON)
+    events as progress updates and intermediate YAMLs are ready.
+
+    Event types emitted:
+    - chat_id: { chat_id }
+    - status: { message }
+    - agents_yaml: { name: "agents.yaml", content }
+    - workflow_yaml: { name: "workflow.yaml", content }
+    - final: { response, yaml_files: [...], chat_id }
+    - error: { message }
+    - done: {}
+    """
+
+    async def event_generator():
+        def to_line(obj: Dict[str, Any]) -> bytes:
+            return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+
+        chat_id = str(uuid.uuid4())
+        try:
+            # Emit chat_id early so UI can attach updates
+            yield to_line({"type": "chat_id", "chat_id": chat_id})
+            yield to_line({"type": "status", "message": "(Starting generation)"})
+            await asyncio.sleep(0)
+            yield to_line({"type": "status", "message": "(Reading user request)"})
+            await asyncio.sleep(0)
+            yield to_line({"type": "status", "message": "(Planning agents)"})
+            await asyncio.sleep(0)
+            yield to_line({"type": "status", "message": "Generating agents.yaml..."})
+            await asyncio.sleep(0)
+
+            agents_output, agents_yaml = await generate_agents_yaml(message.content)
+            for line in agents_output.splitlines():
+                if line.strip():
+                    yield to_line({"type": "ai_output", "source": "agents", "line": line})
+            await asyncio.sleep(0)
+
+            # Emit agents YAML as soon as it's ready
+            yield to_line({
+                "type": "agents_yaml",
+                "file": {"name": "agents.yaml", "content": agents_yaml},
+                "chat_id": chat_id,
+            })
+            await asyncio.sleep(0)
+            yield to_line({"type": "status", "message": "(Parsing agents output)"})
+            await asyncio.sleep(0)
+
+            # Build workflow prompt based on parsed agents
+            agents_info: List[Dict[str, str]] = []
+            try:
+                agent_blocks = agents_yaml.split('---')
+                for block in agent_blocks:
+                    if block.strip():
+                        agent_data = yaml.safe_load(block)
+                        if agent_data and 'metadata' in agent_data and 'name' in agent_data['metadata']:
+                            name = agent_data['metadata']['name']
+                            description = agent_data.get('spec', {}).get('description', '')
+                            agents_info.append({'name': name, 'description': description})
+            except yaml.YAMLError:
+                name_matches = re.findall(r'name:\s*(\w+)', agents_yaml)
+                desc_matches = re.findall(r'description:\s*\|\s*\n\s*(.+?)(?=\n\s*\w+:|$)', agents_yaml, re.DOTALL)
+                for i, name in enumerate(name_matches):
+                    description = desc_matches[i] if i < len(desc_matches) else ""
+                    agents_info.append({'name': name, 'description': description.strip()})
+
+            workflow_prompt = f"Create a workflow that uses the following agents:\n\n"
+            for i, agent in enumerate(agents_info, 1):
+                workflow_prompt += f"agent{i}: {agent['name']} – {agent['description']}\n"
+            workflow_prompt += f"\nprompt: {message.content}"
+
+            yield to_line({"type": "status", "message": "(Building workflow prompt)"})
+            await asyncio.sleep(0)
+            yield to_line({"type": "status", "message": "Generating workflow.yaml..."})
+            await asyncio.sleep(0)
+
+            async with httpx.AsyncClient(timeout=180) as client:
+                workflow_resp = await client.post(
+                    "http://localhost:8004/chat",
+                    json={"prompt": workflow_prompt, "agent": "WorkflowYAMLBuilder"},
+                )
+            if workflow_resp.status_code != 200:
+                raise Exception(f"Workflow generation failed: {workflow_resp.text}")
+
+            workflow_output = workflow_resp.json().get("response", "")
+            workflow_yaml = ""
+            # Emit raw workflow output as AI output lines for UI visibility
+            for line in workflow_output.splitlines():
+                if line.strip():
+                    yield to_line({"type": "ai_output", "source": "workflow", "line": line})
+            await asyncio.sleep(0)
+            if "```yaml" in workflow_output:
+                workflow_yaml = (
+                    workflow_output.split("```yaml", 1)[-1].split("```", 1)[0].strip()
+                )
+            elif "```" in workflow_output:
+                workflow_yaml = workflow_output.split("```", 1)[-1].split("```", 1)[0].strip()
+            else:
+                yaml_match = re.search(r"apiVersion:.*?(?=\n\n|\Z)", workflow_output, re.DOTALL)
+                if yaml_match:
+                    workflow_yaml = yaml_match.group(0).strip()
+
+            # Emit workflow YAML
+            yield to_line({
+                "type": "workflow_yaml",
+                "file": {"name": "workflow.yaml", "content": workflow_yaml},
+                "chat_id": chat_id,
+            })
+            await asyncio.sleep(0)
+            yield to_line({"type": "status", "message": "(Parsing workflow output)"})
+            await asyncio.sleep(0)
+            yield to_line({"type": "status", "message": "(Finalizing response)"})
+            await asyncio.sleep(0)
+
+            final_response = create_final_response(message.content, agents_yaml, workflow_yaml)
+
+            final_payload = {
+                "type": "final",
+                "response": final_response,
+                "yaml_files": [
+                    {"name": "agents.yaml", "content": agents_yaml},
+                    {"name": "workflow.yaml", "content": workflow_yaml},
+                ],
+                "chat_id": chat_id,
+            }
+            yield to_line(final_payload)
+            yield to_line({"type": "done"})
+        except Exception as e:
+            yield to_line({"type": "error", "message": f"{e}"})
+            yield to_line({"type": "done"})
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+
+
+@app.get("/api/stream_logs")
+async def stream_logs(source: str = "agents", from_start: bool = False):
+    """
+    Stream Maestro log files as Server-Sent Events (SSE).
+    Query params:
+      - source: 'agents' | 'workflow' (defaults to 'agents')
+      - from_start: if True, stream from beginning of file, otherwise tail new lines
+    """
+    logs_dir = Path(__file__).resolve().parent.parent / "logs"
+    file_map = {
+        "agents": logs_dir / "maestro_agents.log",
+        "workflow": logs_dir / "maestro_workflow.log",
+    }
+    log_path = file_map.get(source, file_map["agents"])  # default to agents
+
+    async def sse_generator():
+        try:
+            # Ensure file exists
+            if not log_path.exists():
+                yield f"data: {json.dumps({'type': 'error', 'message': f'Log file not found: {log_path.name}'})}\n\n"
+                return
+
+            with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                if not from_start:
+                    f.seek(0, os.SEEK_END)
+
+                while True:
+                    line = f.readline()
+                    if line:
+                        payload = {"type": "log", "source": source, "line": line.rstrip("\n")}
+                        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                    else:
+                        await asyncio.sleep(0.25)
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(sse_generator(), media_type="text/event-stream")
 
 
 @app.get("/api/get_yamls/{chat_id}", response_model=List[YamlFile])
