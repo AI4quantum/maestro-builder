@@ -4,12 +4,14 @@ import { Send, Paperclip, Mic, ChevronDown, Lightbulb } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 interface ChatInputProps {
-  onSendMessage: (message: string) => void
+  onSendMessage: (message: string, useStreaming: boolean) => void
   onEditYaml?: (instruction: string) => void
   disabled?: boolean
+  streamingEnabled?: boolean
+  onToggleStreaming?: (enabled: boolean) => void
 }
 
-export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatInputProps) {
+export function ChatInput({ onSendMessage, onEditYaml, disabled = false, streamingEnabled = true, onToggleStreaming }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -38,7 +40,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
-      onSendMessage(message.trim())
+      onSendMessage(message.trim(), streamingEnabled)
       setMessage('')
       setIsTyping(false)
     }
@@ -53,7 +55,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
 
   const handleSuggestionClick = (suggestion: string) => {
     if (!disabled) {
-      onSendMessage(suggestion)
+      onSendMessage(suggestion, streamingEnabled)
       setShowSuggestions(false)
     }
   }
@@ -119,6 +121,30 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
               </div>
             )}
           </div>
+
+          {/* Streaming Toggle */}
+          {onToggleStreaming && (
+            <button
+              onClick={() => !disabled && onToggleStreaming(!streamingEnabled)}
+              className={cn(
+                "p-2 rounded-xl transition-all duration-200 flex items-center gap-2",
+                streamingEnabled 
+                  ? "bg-green-100 text-green-600 hover:bg-green-200" 
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200",
+                disabled && "opacity-50"
+              )}
+              title={streamingEnabled ? "Disable streaming" : "Enable streaming"}
+              disabled={disabled}
+            >
+              <div className={cn(
+                "w-2 h-2 rounded-full transition-colors",
+                streamingEnabled ? "bg-green-500" : "bg-gray-400"
+              )} />
+              <span className="text-xs font-medium">
+                {streamingEnabled ? "Live" : "Batch"}
+              </span>
+            </button>
+          )}
 
           {/* Text Input */}
           <div className="flex-1 min-h-[44px] max-h-32">
