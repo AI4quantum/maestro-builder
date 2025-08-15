@@ -20,10 +20,11 @@ PID_FILES=(
   "logs/maestro_agents.pid"
   "logs/maestro_workflow.pid"
   "logs/editing_agent.pid"
+  "logs/supervisor_agent.pid"
   "logs/api.pid"
   "logs/builder.pid"
 )
-PORTS=(8000 8001 8002 8003 8004 5174)
+PORTS=(8000 8001 8002 8003 8004 8005 5174)
 
 CLEAR_LOGS=false
 for arg in "$@"; do
@@ -82,6 +83,7 @@ if [ "$CLEAR_LOGS" = true ]; then
   > logs/maestro_agents.log
   > logs/maestro_workflow.log
   > logs/editing_agent.log
+  > logs/supervisor_agent.log
   > logs/maestro.log
   print_success "All log files have been cleared."
 fi
