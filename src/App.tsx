@@ -46,6 +46,7 @@ function App() {
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([])
   const [activeYamlTab, setActiveYamlTab] = useState<'agents.yaml' | 'workflow.yaml'>('agents.yaml');
+  const [streamingEnabled, setStreamingEnabled] = useState(true);
 
   // Load chat history on component mount
   useEffect(() => {
@@ -175,7 +176,7 @@ function App() {
     }
   }
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, useStreaming: boolean = true) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -220,7 +221,8 @@ function App() {
     })
 
     try {
-      await apiService.streamCompleteMessage(content, {
+      if (useStreaming) {
+        await apiService.streamGenerateMessage(content, {
         onEvent: async (event: StreamEvent) => {
           if (event.type === 'status') {
             setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: m.content ? `${m.content}\n… ${event.message}` : `… ${event.message}` } : m))
@@ -257,7 +259,7 @@ function App() {
             setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: `${m.content}\nError: ${event.message}` } : m))
           }
         },
-        onError: (err) => {
+        onError: (err: Error) => {
           console.error('Streaming error:', err)
         },
         onComplete: () => {
@@ -267,8 +269,25 @@ function App() {
           closeWorkflowLogs()
         }
       }, currentChatId || undefined)
+      } else {
+        const response = await apiService.sendGenerateMessage(content, currentChatId || undefined)
+        response.yaml_files.forEach(file => mergeYaml(file))
+        setMessages(prev => [...prev, { 
+          id: String(Date.now() + 2), 
+          role: 'assistant', 
+          content: response.response, 
+          timestamp: new Date() 
+        }])
+        if (response.chat_id !== currentChatId) {
+          setCurrentChatId(response.chat_id)
+          await loadChatHistory()
+        }
+        setIsLoading(false)
+        closeAgentsLogs()
+        closeWorkflowLogs()
+      }
     } catch (error) {
-      console.error('Error streaming message:', error)
+      console.error('Error processing message:', error)
       setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: `${m.content}\nSorry, I encountered an error while processing your request. Please try again.` } : m))
       setIsLoading(false)
       closeAgentsLogs()
@@ -351,7 +370,13 @@ function App() {
         </div>
         {/* Chat Input */}
         <div className="border-t border-gray-100 p-6 shrink-0">
-          <ChatInput onSendMessage={handleSendMessage} onEditYaml={handleEditYaml} disabled={isLoading} />
+          <ChatInput 
+          onSendMessage={handleSendMessage}
+          onEditYaml={handleEditYaml}
+          disabled={isLoading}
+          streamingEnabled={streamingEnabled}
+          onToggleStreaming={setStreamingEnabled}
+        />
         </div>
       </div>
 

@@ -163,9 +163,9 @@ class ApiService {
     }
   }
 
-  async sendCompleteMessage(message: string, chatId?: string): Promise<ChatResponse> {
+  async sendGenerateMessage(message: string, chatId?: string): Promise<ChatResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat_builder_complete`, {
+      const response = await fetch(`${API_BASE_URL}/api/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -192,9 +192,9 @@ class ApiService {
     }
   }
 
-  async streamCompleteMessage(message: string, handlers: StreamHandlers = {}, chatId?: string): Promise<void> {
+  async streamGenerateMessage(message: string, handlers: StreamHandlers = {}, chatId?: string): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat_builder_complete_stream`, {
+      const response = await fetch(`${API_BASE_URL}/api/generate/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
