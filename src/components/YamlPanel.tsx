@@ -352,7 +352,7 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
   }
 
   return (
-    <div className="w-1/3 h-full border-l border-gray-100 bg-gradient-to-br from-white via-blue-50 to-indigo-50 flex flex-col font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif] shadow-2xl rounded-l-2xl">
+    <div className="w-2/5 h-full border-l border-gray-100 bg-gradient-to-br from-white via-blue-50 to-indigo-50 flex flex-col font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif] shadow-2xl rounded-l-2xl">
       <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-white/80 backdrop-blur-md rounded-tl-2xl">
         <h2 className="text-lg font-bold text-gray-900 tracking-wide">Generated Files</h2>
         <div className="flex items-center gap-2">
