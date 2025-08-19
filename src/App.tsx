@@ -364,7 +364,7 @@ function App() {
       />
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+      <div className="w-3/5 flex flex-col min-w-0 overflow-y-auto">
         <div className="flex-1">
           <ChatCanvas messages={messages} isLoading={isLoading} />
         </div>

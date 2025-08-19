@@ -52,7 +52,7 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
   const activeFile = allFileNames.indexOf(activeTab)
   const [showLineNumbers, setShowLineNumbers] = useState(true)
   const [copiedFile, setCopiedFile] = useState<string | null>(null)
-  const [showDiff, setShowDiff] = useState(true)
+  const [showDiff, setShowDiff] = useState(false)
   const [validationResult, setValidationResult] = useState<ValidateYamlResponse | null>(null)
   const [isValidating, setIsValidating] = useState(false)
   const prevYamlRef = useRef<{ [name: string]: string }>({})
@@ -67,6 +67,16 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
   const filesToShow: YamlFile[] = allFileNames.map(name =>
     yamlFiles.find(f => f.name === name) || { name, content: '', language: 'yaml' as const }
   )
+
+  // Ensure line numbers are properly aligned after content changes
+  useEffect(() => {
+    if (showLineNumbers && filesToShow.some(f => f.content.trim())) {
+      const codeBlocks = document.querySelectorAll('code.language-yaml')
+      codeBlocks.forEach(block => {
+        Prism.highlightElement(block)
+      })
+    }
+  }, [filesToShow.map(f => f.content).join(''), showLineNumbers])
 
   // Track changes for diff - store the previous version before updating
   useEffect(() => {
@@ -109,19 +119,51 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
   }
 
   const renderLineNumbers = (content: string) => {
-    const lines = content.split('\n')
+    const decodedContent = decodeEscaped(content)
+    const lines = decodedContent.split('\n')
+    
+    if (!decodedContent.trim()) {
+      return (
+        <pre className="text-sm font-mono p-4 overflow-x-auto overflow-y-auto bg-white font-['Courier_New'] whitespace-pre leading-6">
+          <code className="language-yaml whitespace-pre leading-6">{decodedContent}</code>
+        </pre>
+      )
+    }
+    
     return (
-      <div className="flex">
-        <div className="w-12 flex-shrink-0 bg-gray-100 text-gray-500 text-sm font-mono p-4 border-r border-gray-200 font-['Courier_New']">
+      <div 
+        className="relative bg-white overflow-auto"
+        style={{ 
+          display: 'grid',
+          gridTemplateColumns: '3rem 1fr',
+          fontFamily: 'Courier New, monospace',
+          fontSize: '0.875rem',
+          lineHeight: '1.5rem'
+        }}
+      >
+        <div 
+          className="bg-gray-50 border-r border-gray-100 text-right text-xs text-gray-400 font-mono"
+          style={{ 
+            padding: '0 0.5rem',
+            lineHeight: '1.5rem'
+          }}
+        >
           {lines.map((_, index) => (
-            <div key={index} className="text-right">
-              {index + 1}
-            </div>
+            <div key={index}>{index + 1}</div>
           ))}
         </div>
-        <div className="flex-1">
-          <pre className="text-sm font-mono p-4 overflow-x-auto bg-white font-['Courier_New'] whitespace-pre">
-            <code className="language-yaml whitespace-pre">{decodeEscaped(content)}</code>
+        
+        <div style={{ overflow: 'auto' }}>
+          <pre 
+            className="font-mono whitespace-pre bg-white m-0"
+            style={{ 
+              padding: '0 1rem',
+              lineHeight: '1.5rem',
+              fontSize: '0.875rem',
+              fontFamily: 'Courier New, monospace'
+            }}
+          >
+            <code className="language-yaml">{decodedContent}</code>
           </pre>
         </div>
       </div>
@@ -130,7 +172,6 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
 
   const renderDiff = (oldContent: string, newContent: string) => {
     if (oldContent === newContent || oldContent === '') {
-      // No diff to show, just render the new content
       return (
         <pre className="text-sm font-mono p-4 overflow-x-auto bg-white font-['Courier_New'] whitespace-pre">
           <code className="language-yaml whitespace-pre">{decodeEscaped(newContent)}</code>
@@ -145,19 +186,19 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
         <div className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-xs text-blue-700 font-medium">
           Showing changes (green = added, red = removed)
         </div>
-        <div className="text-sm font-mono px-4 py-2 overflow-y-auto flex-1 min-h-0 bg-white font-['Courier_New'] whitespace-pre">
+        <div className="text-sm font-mono px-4 py-0 overflow-y-auto flex-1 min-h-0 bg-white font-['Courier_New'] whitespace-pre">
           {lines.map((line, idx) => {
             const lineStyle = line.type === 'insert'
-              ? { backgroundColor: '#dcfce7', color: '#166534' } // green-100 bg, green-800 text
+              ? { backgroundColor: '#dcfce7', color: '#166534' }
               : line.type === 'delete'
-              ? { backgroundColor: '#fee2e2', color: '#991b1b' } // red-100 bg, red-800 text
-              : { color: '#1f2937' } // gray-800 text
+              ? { backgroundColor: '#fee2e2', color: '#991b1b' }
+              : { color: '#1f2937' }
 
             return (
               <div
                 key={idx}
                 style={lineStyle}
-                className="w-full"
+                className="w-full leading-6"
               >
                 {line.type === 'insert' ? '+' : line.type === 'delete' ? '-' : ' '} {decodeEscaped(line.text)}
               </div>
@@ -311,8 +352,7 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
   }
 
   return (
-    <div className="w-1/3 h-full border-l border-gray-100 bg-gradient-to-br from-white via-blue-50 to-indigo-50 flex flex-col font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif] shadow-2xl rounded-l-2xl">
-      {/* Header */}
+    <div className="w-2/5 h-full border-l border-gray-100 bg-gradient-to-br from-white via-blue-50 to-indigo-50 flex flex-col font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif] shadow-2xl rounded-l-2xl">
       <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-white/80 backdrop-blur-md rounded-tl-2xl">
         <h2 className="text-lg font-bold text-gray-900 tracking-wide">Generated Files</h2>
         <div className="flex items-center gap-2">
@@ -339,7 +379,6 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
         </div>
       </div>
 
-      {/* File Tabs */}
       <div className="flex border-b border-gray-100 bg-white/70 backdrop-blur-md px-4 pt-2">
         {filesToShow.map((file, index) => {
           const hasFileContent = file.content.trim() !== ''
@@ -365,11 +404,9 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
         })}
       </div>
 
-      {/* File Content */}
       <div className="flex-1 overflow-hidden p-4">
         {filesToShow.length > 0 && hasContent ? (
           <div className="h-full flex flex-col">
-            {/* File Actions */}
             <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-white/80 backdrop-blur-md rounded-t-xl">
               <span className="text-xs text-gray-500 font-medium">
                 {filesToShow[activeFile].name}
@@ -411,7 +448,6 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
                 >
                   <Save size={16} />
                 </button>
-                {/* Direct Edit Button */}
                 <button
                   onClick={handleYamlClick}
                   className="p-2 rounded-xl hover:bg-blue-100 hover:text-blue-700 transition-colors shadow-sm"
@@ -445,7 +481,6 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
               </div>
             </div>
 
-            {/* Validation Result */}
             {validationResult && (
               <div className={cn(
                 "p-4 border-b border-gray-100",
@@ -492,7 +527,6 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
               </div>
             )}
 
-            {/* YAML Content */}
             <div className="flex-1 overflow-auto bg-white/90 rounded-b-xl shadow-xl p-4 mt-2 yaml-content-container relative">
               {filesToShow[activeFile].content.trim() === '' ? (
                 <div className="flex items-center justify-center h-full text-gray-400">
@@ -505,16 +539,16 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
                   </div>
                 </div>
               ) : showDiff ? (
-                <div onClick={handleYamlClick} style={{ cursor: 'pointer' }}>
+                <div onClick={handleYamlClick} style={{ cursor: 'pointer' }} key={`diff-${filesToShow[activeFile].content.length}`}>
                   {renderDiff(prevYamlRef.current[filesToShow[activeFile].name] || '', filesToShow[activeFile].content)}
                 </div>
               ) : showLineNumbers ? (
-                <div onClick={handleYamlClick} style={{ cursor: 'pointer' }}>
+                <div onClick={handleYamlClick} style={{ cursor: 'pointer' }} key={`line-numbers-${filesToShow[activeFile].content.length}`} className="overflow-auto">
                   {renderLineNumbers(filesToShow[activeFile].content)}
                 </div>
               ) : (
-                <div onClick={handleYamlClick} style={{ cursor: 'pointer' }}>
-                  <pre className="text-sm font-mono p-6 overflow-x-auto bg-gray-50 font-['Courier_New'] whitespace-pre">
+                <div onClick={handleYamlClick} style={{ cursor: 'pointer' }} key={`regular-${filesToShow[activeFile].content.length}`}>
+                  <pre className="text-sm font-mono p-4 overflow-x-auto bg-gray-50 font-['Courier_New'] whitespace-pre">
                     <code className="language-yaml whitespace-pre">{decodeEscaped(filesToShow[activeFile].content)}</code>
                   </pre>
                 </div>
