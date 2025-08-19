@@ -396,3 +396,118 @@ Example valid responses:
             "• **workflow.yaml** - Contains the workflow that uses those agents\n\n"
             "Both files are now available in the YAML panel on the right. You can switch between tabs to view each file."
         )
+
+    def process_request_in_background(self, request_id: str, content: str, chat_id: str, 
+                                     status_logger_callback, result_callback, db_instance):
+        """
+        Background function to process supervisor requests with real-time status updates.
+        
+        Args:
+            request_id: Unique identifier for this request
+            content: User's request content
+            chat_id: Chat session ID
+            status_logger_callback: Function to call for status updates
+            result_callback: Function to call with final result
+            db_instance: Database instance for YAML file retrieval
+        """
+        try:
+            status_logger = status_logger_callback(request_id)
+            logged_supervisor = SupervisorAgent(logger_callback=status_logger)
+            
+            status_logger("🎯 Processing your request...")
+            
+            # Get existing YAML content for context
+            agents_yaml_content = ""
+            workflow_yaml_content = ""
+            
+            if chat_id:
+                try:
+                    status_logger("📂 Loading existing YAML files for context...")
+                    yaml_files = db_instance.get_yaml_files(chat_id)
+                    for file in yaml_files:
+                        if file['name'] == 'agents.yaml':
+                            agents_yaml_content = file['content']
+                        elif file['name'] == 'workflow.yaml':
+                            workflow_yaml_content = file['content']
+                    if agents_yaml_content or workflow_yaml_content:
+                        status_logger("✅ Found existing YAML files to use as context")
+                    else:
+                        status_logger("📝 No existing YAML files found, starting fresh")
+                except Exception as e:
+                    status_logger(f"⚠️ Could not fetch YAML files for context: {e}", "warning")
+            
+            # Classify user intent
+            classification = logged_supervisor.classify_user_intent(
+                content, agents_yaml_content, workflow_yaml_content
+            )
+
+            # Handle EDIT_YAML intent
+            if classification.intent == Intent.EDIT_YAML:
+                if not agents_yaml_content and not workflow_yaml_content:
+                    status_logger("⚠️ No existing YAML files found, switching to workflow generation")
+                    classification.intent = Intent.GENERATE_WORKFLOW
+                else:
+                    file_to_edit = "agents.yaml" if agents_yaml_content else "workflow.yaml"
+                    yaml_content = agents_yaml_content if agents_yaml_content else workflow_yaml_content
+                    
+                    status_logger(f"✏️ Editing {file_to_edit}...")
+                    
+                    edited_yaml = logged_supervisor.edit_yaml(
+                        yaml_content=yaml_content,
+                        file_to_edit=file_to_edit,
+                        instruction=content,
+                    )
+                    
+                    status_logger(f"✅ Successfully edited {file_to_edit}")
+                    
+                    response_text = logged_supervisor.build_success_response(
+                        Intent.EDIT_YAML, content, file_to_edit
+                    )
+                    
+                    result = {
+                        "intent": classification.intent.value,
+                        "confidence": float(classification.confidence),
+                        "reasoning": classification.reasoning or "Successfully routed to editing",
+                        "response": response_text,
+                        "yaml_files": [{"name": file_to_edit, "content": edited_yaml}],
+                        "chat_id": chat_id,
+                    }
+                    
+                    result_callback(request_id, result)
+                    status_logger("🎉 Request completed successfully!")
+                    return
+
+            # Handle GENERATE_WORKFLOW intent
+            status_logger("🎯 Routing to workflow generation...")
+            
+            agents_yaml, workflow_yaml = logged_supervisor.process_complete_workflow_generation(content)
+            
+            response_text = logged_supervisor.build_success_response(
+                Intent.GENERATE_WORKFLOW, content
+            )
+
+            result = {
+                "intent": Intent.GENERATE_WORKFLOW.value,
+                "confidence": float(classification.confidence) if classification else 1.0,
+                "reasoning": classification.reasoning or "Successfully routed to workflow generation",
+                "response": response_text,
+                "yaml_files": [
+                    {"name": "agents.yaml", "content": agents_yaml},
+                    {"name": "workflow.yaml", "content": workflow_yaml},
+                ],
+                "chat_id": chat_id,
+            }
+            
+            result_callback(request_id, result)
+            status_logger("🎉 Request completed successfully!")
+            
+        except Exception as e:
+            status_logger = status_logger_callback(request_id)
+            status_logger(f"❌ Error occurred: {str(e)}", "error")
+            
+            # Store error result
+            error_result = {
+                "error": True,
+                "message": str(e)
+            }
+            result_callback(request_id, error_result)

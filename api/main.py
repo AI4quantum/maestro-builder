@@ -685,97 +685,20 @@ class AsyncSupervisorResponse(BaseModel):
     status: str
     message: str
 
-def process_supervisor_request_background(request_id: str, content: str, chat_id: str):
-    """Background function to process supervisor requests with real-time status updates."""
-    try:
-        status_logger = create_status_logger(request_id)
-        logged_supervisor = SupervisorAgent(logger_callback=status_logger)
-        status_logger("🎯 Processing your request...")
-        agents_yaml_content = ""
-        workflow_yaml_content = ""
-        
-        if chat_id:
-            try:
-                status_logger("📂 Loading existing YAML files for context...")
-                yaml_files = db.get_yaml_files(chat_id)
-                for file in yaml_files:
-                    if file['name'] == 'agents.yaml':
-                        agents_yaml_content = file['content']
-                    elif file['name'] == 'workflow.yaml':
-                        workflow_yaml_content = file['content']
-                if agents_yaml_content or workflow_yaml_content:
-                    status_logger("✅ Found existing YAML files to use as context")
-                else:
-                    status_logger("📝 No existing YAML files found, starting fresh")
-            except Exception as e:
-                status_logger(f"⚠️ Could not fetch YAML files for context: {e}", "warning")
-        
-        classification = logged_supervisor.classify_user_intent(
-            content, agents_yaml_content, workflow_yaml_content
+def store_request_result(request_id: str, result):
+    """Store the result of a background request."""
+    if isinstance(result, dict) and "error" not in result:
+        supervisor_result = SupervisorResponse(
+            intent=result["intent"],
+            confidence=result["confidence"],
+            reasoning=result["reasoning"],
+            response=result["response"],
+            yaml_files=result["yaml_files"],
+            chat_id=result["chat_id"],
         )
-
-        if classification.intent == Intent.EDIT_YAML:
-            if not agents_yaml_content and not workflow_yaml_content:
-                status_logger("⚠️ No existing YAML files found, switching to workflow generation")
-                classification.intent = Intent.GENERATE_WORKFLOW
-            else:
-                file_to_edit = "agents.yaml" if agents_yaml_content else "workflow.yaml"
-                yaml_content = agents_yaml_content if agents_yaml_content else workflow_yaml_content
-                
-                status_logger(f"✏️ Editing {file_to_edit}...")
-                
-                edited_yaml = logged_supervisor.edit_yaml(
-                    yaml_content=yaml_content,
-                    file_to_edit=file_to_edit,
-                    instruction=content,
-                )
-                
-                status_logger(f"✅ Successfully edited {file_to_edit}")
-                
-                response_text = logged_supervisor.build_success_response(
-                    Intent.EDIT_YAML, content, file_to_edit
-                )
-                
-                result = SupervisorResponse(
-                    intent=classification.intent.value,
-                    confidence=float(classification.confidence),
-                    reasoning=classification.reasoning or "Successfully routed to editing",
-                    response=response_text,
-                    yaml_files=[{"name": file_to_edit, "content": edited_yaml}],
-                    chat_id=chat_id,
-                )
-                
-                request_results[request_id] = result
-                status_logger("🎉 Request completed successfully!")
-                return
-
-        # Handle GENERATE_WORKFLOW intent
-        status_logger("🎯 Routing to workflow generation...")
-        agents_yaml, workflow_yaml = logged_supervisor.process_complete_workflow_generation(content)
-        response_text = logged_supervisor.build_success_response(
-            Intent.GENERATE_WORKFLOW, content
-        )
-        result = SupervisorResponse(
-            intent=Intent.GENERATE_WORKFLOW.value,
-            confidence=float(classification.confidence) if classification else 1.0,
-            reasoning=classification.reasoning or "Successfully routed to workflow generation",
-            response=response_text,
-            yaml_files=[
-                {"name": "agents.yaml", "content": agents_yaml},
-                {"name": "workflow.yaml", "content": workflow_yaml},
-            ],
-            chat_id=chat_id,
-        )
+        request_results[request_id] = supervisor_result
+    else:
         request_results[request_id] = result
-        status_logger("🎉 Request completed successfully!")
-        
-    except Exception as e:
-        status_logger = create_status_logger(request_id)
-        status_logger(f"❌ Error occurred: {str(e)}", "error")
-        request_results[request_id] = {
-            "error": True,
-            "message": str(e)
-        }
 
 @app.post("/api/supervisor", response_model=SupervisorResponse)
 async def supervisor_route(request: SupervisorRequest):
@@ -900,7 +823,16 @@ async def supervisor_route_async(request: SupervisorRequest):
     """
     request_id = str(uuid.uuid4())
     chat_id = request.chat_id or str(uuid.uuid4())
-    executor.submit(process_supervisor_request_background, request_id, request.content, chat_id)
+    # Start background processing using the supervisor agent
+    executor.submit(
+        supervisor_agent.process_request_in_background,
+        request_id, 
+        request.content, 
+        chat_id,
+        create_status_logger,
+        store_request_result,
+        db
+    )
     
     return AsyncSupervisorResponse(
         request_id=request_id,
