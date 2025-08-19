@@ -18,15 +18,15 @@ export interface YamlFile {
   language: 'yaml'
 }
 
+const INITIAL_GREETING: Message = {
+  id: '1',
+  role: 'assistant',
+  content: 'Hello! I\'m your Maestro AI Builder assistant. I can help you create workflows and edit YAML files. Just describe what you want to build or what changes you want to make, and I\'ll handle it automatically. What would you like to do today?',
+  timestamp: new Date()
+}
+
 function App() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: 'Hello! I\'m your Maestro AI Builder assistant. I can help you create workflows and edit YAML files. Just describe what you want to build or what changes you want to make, and I\'ll handle it automatically. What would you like to do today?',
-      timestamp: new Date()
-    }
-  ])
+  const [messages, setMessages] = useState<Message[]>([INITIAL_GREETING])
   
   const [yamlFiles, setYamlFiles] = useState<YamlFile[]>([
     {
@@ -107,14 +107,10 @@ function App() {
       apiService.setCurrentChatId(chatId)
       
       // Reset to initial state with empty YAML files
-      setMessages([
-        {
-          id: '1',
-          role: 'assistant',
-          content: 'Hello! I\'m your Maestro AI Builder assistant. I can help you create workflows and edit YAML files. Just describe what you want to build or what changes you want to make, and I\'ll handle it automatically. What would you like to do today?',
-          timestamp: new Date()
-        }
-      ])
+      setMessages([{
+        ...INITIAL_GREETING,
+        timestamp: new Date()
+      }])
       
       // Set YAML files to empty state
       setYamlFiles([
