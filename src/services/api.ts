@@ -108,90 +108,51 @@ class ApiService {
     }
   }
 
-  async sendAgentMessage(message: string, chatId?: string): Promise<ChatResponse> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/chat_builder_agent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: message,
-          role: 'user',
-          chat_id: chatId || this.currentChatId
-        } as ChatMessage & { chat_id?: string })
+  async sendMessageAsync(message: string, chatId?: string): Promise<{requestId: string}> {
+    const response = await fetch(`${API_BASE_URL}/api/supervisor-async`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: message,
+        chat_id: chatId || this.currentChatId
       })
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      const data: ChatResponse = await response.json()
-      this.currentChatId = data.chat_id
-      data.yaml_files = data.yaml_files.map(file => ({
-        ...file,
-        content: this.formatYamlContent(file.content)
-      }))
-      return data
-    } catch (error) {
-      console.error('Error sending agent message:', error)
-      return this.getFallbackResponse(message)
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
     }
+
+    const data = await response.json()
+    return { requestId: data.request_id }
   }
 
-  async sendWorkflowMessage(message: string, chatId?: string): Promise<ChatResponse> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/chat_builder_workflow`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: message,
-          role: 'user',
-          chat_id: chatId || this.currentChatId
-        } as ChatMessage & { chat_id?: string })
-      })
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      const data: ChatResponse = await response.json()
-      this.currentChatId = data.chat_id
-      data.yaml_files = data.yaml_files.map(file => ({
-        ...file,
-        content: this.formatYamlContent(file.content)
-      }))
-      return data
-    } catch (error) {
-      console.error('Error sending workflow message:', error)
-      return this.getFallbackResponse(message)
+  async getAsyncResult(requestId: string): Promise<ChatResponse | null> {
+    const response = await fetch(`${API_BASE_URL}/api/supervisor-result/${requestId}`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
     }
-  }
 
-  async sendGenerateMessage(message: string, chatId?: string): Promise<ChatResponse> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: message,
-          role: 'user',
-          chat_id: chatId || this.currentChatId
-        } as ChatMessage & { chat_id?: string })
-      })
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      const data: ChatResponse = await response.json()
-      this.currentChatId = data.chat_id
-      data.yaml_files = data.yaml_files.map(file => ({
-        ...file,
-        content: this.formatYamlContent(file.content)
-      }))
-      return data
-    } catch (error) {
-      console.error('Error sending complete message:', error)
-      return this.getFallbackResponse(message)
+    const data = await response.json()
+    
+    if (data.status === 'processing') {
+      return null
+    }
+
+    if (data.error) {
+      throw new Error(data.message)
+    }
+    this.currentChatId = data.chat_id
+    
+    data.yaml_files = data.yaml_files.map((file: any) => ({
+      ...file,
+      content: this.formatYamlContent(file.content)
+    }))
+    
+    return {
+      response: data.response,
+      yaml_files: data.yaml_files,
+      chat_id: data.chat_id
     }
   }
 
@@ -256,7 +217,7 @@ class ApiService {
       console.error('Error streaming complete message:', error)
       handlers.onError?.(error as Error)
       try {
-        const fallback = await this.sendCompleteMessage(message, chatId)
+        const fallback = await this.sendMessage(message, chatId)
         handlers.onEvent?.({ type: 'final', response: fallback.response, yaml_files: fallback.yaml_files, chat_id: fallback.chat_id })
         handlers.onEvent?.({ type: 'done' })
         handlers.onComplete?.()
@@ -541,6 +502,43 @@ workflow:
       yaml_files: yamlFiles,
       chat_id: 'fallback-session'
     }
+  }
+
+  // Poll for status updates
+  async getStatusUpdates(chatId: string): Promise<Array<{message: string, level: string, timestamp: string}>> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/status/${chatId}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      return data.updates || [];
+    } catch (error) {
+      console.error('Error getting status updates:', error);
+      return [];
+    }
+  }
+
+  startStatusPolling(chatId: string, onUpdate: (updates: Array<{message: string, level: string, timestamp: string}>) => void): () => void {
+    let isPolling = true;  
+    const poll = async () => {
+      if (!isPolling) return;
+      try {
+        const updates = await this.getStatusUpdates(chatId);
+        if (updates.length > 0) {
+          onUpdate(updates);
+        }
+      } catch (error) {
+        console.error('Error polling status updates:', error);
+      }
+      if (isPolling) {
+        setTimeout(poll, 100);
+      }
+    };
+    poll();
+    return () => {
+      isPolling = false;
+    };
   }
 }
 
