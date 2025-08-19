@@ -5,13 +5,12 @@ import { cn } from '../lib/utils'
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void
-  onEditYaml?: (instruction: string) => void
   disabled?: boolean
   streamingEnabled?: boolean
   onToggleStreaming?: (enabled: boolean) => void
 }
 
-export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatInputProps) {
+export function ChatInput({ onSendMessage, disabled = false, streamingEnabled = true, onToggleStreaming }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -39,7 +38,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
-      onSendMessage(message.trim(), streamingEnabled)
+      onSendMessage(message.trim())
       setMessage('')
       setIsTyping(false)
     }
@@ -54,7 +53,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false }: ChatI
 
   const handleSuggestionClick = (suggestion: string) => {
     if (!disabled) {
-      onSendMessage(suggestion, streamingEnabled)
+      onSendMessage(suggestion)
       setShowSuggestions(false)
     }
   }

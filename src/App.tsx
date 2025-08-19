@@ -3,7 +3,7 @@ import { Sidebar } from './components/Sidebar'
 import { ChatCanvas } from './components/ChatCanvas'
 import { YamlPanel } from './components/YamlPanel'
 import { ChatInput } from './components/ChatInput'
-import { apiService, type ChatHistory, type ChatSession } from './services/api'
+import { apiService, type ChatHistory } from './services/api'
 
 export interface Message {
   id: string
@@ -155,18 +155,13 @@ function App() {
 
   const deleteAllChats = async () => {
     try {
-      console.log('Starting delete all chats...')
       const success = await apiService.deleteAllChatSessions()
-      console.log('Delete all chats result:', success)
       
       if (success) {
-        console.log('Creating new chat after deletion...')
         // Create a new chat since all chats were deleted
         await createNewChat()
-        console.log('Refreshing chat history...')
         // Refresh chat history (should be empty now)
         await loadChatHistory()
-        console.log('Delete all chats completed successfully')
       } else {
         console.error('Failed to delete all chats - API returned false')
       }
@@ -175,7 +170,7 @@ function App() {
     }
   }
 
-  const handleSendMessage = async (content: string, useStreaming: boolean = true) => {
+  const handleSendMessage = async (content: string) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -195,33 +190,35 @@ function App() {
       timestamp: new Date()
     }])
 
-    const mergeYaml = (incoming: { name: string; content: string }) => {
-      setYamlFiles(prev => {
-        const exists = prev.find(f => f.name === incoming.name)
-        if (exists) {
-          return prev.map(f => f.name === incoming.name ? { ...f, content: incoming.content } : f)
-        }
-        return [...prev, { name: incoming.name, content: incoming.content, language: 'yaml' }]
+
+    let stopStatusPolling: (() => void) | undefined
+    const startPollingForRequest = (requestChatId: string) => {
+      stopStatusPolling = apiService.startStatusPolling(requestChatId, (updates) => {
+        updates.forEach(update => {
+          setMessages(prev => prev.map(m => 
+            m.id === assistantLogId 
+              ? { ...m, content: m.content ? `${m.content}\n${update.message}` : update.message } 
+              : m
+          ))
+        })
       })
     }
-
-    // Start log streaming scoped to this run
-    const closeAgentsLogs = apiService.streamLogs('agents', false, data => {
-      if (data.type === 'log' && data.line) {
-        const line = data.line as string
-        setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: m.content ? `${m.content}\n${line}` : line } : m))
-      }
-    })
-    const closeWorkflowLogs = apiService.streamLogs('workflow', false, data => {
-      if (data.type === 'log' && data.line) {
-        const line = data.line as string
-        setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: m.content ? `${m.content}\n${line}` : line } : m))
-      }
-    })
-
     try {
-      // Use the supervisor endpoint to route to appropriate handler
-      const apiResponse = await apiService.sendMessage(content, currentChatId || undefined);
+      const { requestId } = await apiService.sendMessageAsync(content, currentChatId || undefined);
+      startPollingForRequest(requestId);
+      let apiResponse: any = null;
+      let attempts = 0;
+      const maxAttempts = 120;
+      
+      while (attempts < maxAttempts && !apiResponse) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        apiResponse = await apiService.getAsyncResult(requestId);
+        attempts++;
+      }
+      
+      if (!apiResponse) {
+        throw new Error('Request timed out after 2 minutes');
+      }
 
       // Parse AI response (final_prompt if available)
       let parsedText = apiResponse.response
@@ -248,7 +245,7 @@ function App() {
 
       // Update YAML files from API response, ensuring both files are updated
       const updatedYamlFiles = yamlFiles.map(file => {
-        const apiFile = apiResponse.yaml_files.find(apiFile => apiFile.name === file.name)
+        const apiFile = apiResponse.yaml_files.find((apiFile: any) => apiFile.name === file.name)
         if (apiFile) {
           return {
             ...file,
@@ -266,14 +263,20 @@ function App() {
       }
 
       setIsLoading(false)
-      closeAgentsLogs()
-      closeWorkflowLogs()
+      if (stopStatusPolling) {
+        setTimeout(() => {
+          if (stopStatusPolling) {
+            stopStatusPolling()
+          }
+        }, 1000)
+      }
     } catch (error) {
       console.error('Error processing message:', error)
       setMessages(prev => prev.map(m => m.id === assistantLogId ? { ...m, content: `${m.content}\nSorry, I encountered an error while processing your request. Please try again.` } : m))
       setIsLoading(false)
-      closeAgentsLogs()
-      closeWorkflowLogs()
+      if (stopStatusPolling) {
+        stopStatusPolling()
+      }
     }
   }
 
@@ -305,7 +308,12 @@ function App() {
         </div>
         {/* Chat Input */}
         <div className="border-t border-gray-100 p-6 shrink-0">
-          <ChatInput onSendMessage={handleSendMessage} disabled={isLoading} />
+          <ChatInput 
+            onSendMessage={handleSendMessage} 
+            disabled={isLoading}
+            streamingEnabled={streamingEnabled}
+            onToggleStreaming={setStreamingEnabled}
+          />
         </div>
       </div>
 
