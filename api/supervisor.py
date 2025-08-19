@@ -304,6 +304,7 @@ Example valid responses:
         agents_info: List[Dict[str, str]] = []
         
         try:
+            # First try to parse as properly structured YAML with separators
             agent_blocks = agents_yaml.split("---")
             for block in agent_blocks:
                 if block.strip():
@@ -316,15 +317,26 @@ Example valid responses:
                         name = agent_data["metadata"]["name"]
                         description = agent_data.get("spec", {}).get("description", "")
                         agents_info.append({"name": name, "description": description})
+            if not agents_info:
+                name_count = len(re.findall(r"^name:\s*\w+", agents_yaml, re.MULTILINE))
+                if name_count > 1:
+                    raise yaml.YAMLError("Multiple name entries detected - using regex fallback")
+                else:
+                    agent_data = yaml.safe_load(agents_yaml)
+                    if agent_data and isinstance(agent_data, dict):
+                        if "name" in agent_data:
+                            name = agent_data["name"]
+                            description = agent_data.get("description", "")
+                            agents_info.append({"name": name, "description": description})
                         
         except yaml.YAMLError:
             name_matches = re.findall(r"name:\s*(\w+)", agents_yaml)
             desc_matches = re.findall(
-                r"description:\s*\|\s*\n\s*(.+?)(?=\n\s*\w+:|$)", agents_yaml, re.DOTALL
+                r"description:\s*\|\s*\n\s*(.+?)(?=\nname:|$)", agents_yaml, re.DOTALL
             )
             for i, name in enumerate(name_matches):
-                description = desc_matches[i] if i < len(desc_matches) else ""
-                agents_info.append({"name": name, "description": description.strip()})
+                description = desc_matches[i].strip() if i < len(desc_matches) else ""
+                agents_info.append({"name": name, "description": description})
                 
         return agents_info
 
