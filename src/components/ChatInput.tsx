@@ -18,10 +18,9 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false, streami
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const suggestions = [
-    "Create a simple workflow",
-    "Add an OpenAI agent",
-    "Build a data processing pipeline",
-    "Create a web scraping workflow"
+    "Create a simple workflow to test",
+    "I want to fetch the current stock prices for Apple and Microsoft, and then analyze which one has performed better over the past week.",
+    "Create a workflow to fetch the current weather in San Francisco"
   ]
 
   // Close dropdown when clicking outside
@@ -104,14 +103,14 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false, streami
             </button>
             
             {showSuggestions && (
-              <div className="absolute bottom-full left-0 mb-2 w-64 bg-white border border-gray-200 rounded-xl shadow-lg z-10">
-                <div className="p-2">
+              <div className="absolute bottom-full left-0 mb-2 w-72 bg-white border border-gray-200 rounded-xl shadow-lg z-10">
+                <div className="p-3">
                   <div className="text-sm font-medium text-gray-500 mb-2 px-2">Suggestions</div>
                   {suggestions.map((suggestion) => (
                     <button
                       key={suggestion}
                       onClick={() => handleSuggestionClick(suggestion)}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 mb-1"
                       disabled={disabled}
                     >
                       {suggestion}
