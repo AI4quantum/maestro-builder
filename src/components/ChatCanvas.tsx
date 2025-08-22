@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Bot, User, Code, FileText, Loader2 } from 'lucide-react'
 import type { Message } from '../App'
 import { cn } from '../lib/utils'
@@ -10,6 +10,7 @@ interface ChatCanvasProps {
 
 export function ChatCanvas({ messages, isLoading = false }: ChatCanvasProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [dots, setDots] = useState('')
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -18,6 +19,16 @@ export function ChatCanvas({ messages, isLoading = false }: ChatCanvasProps) {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  useEffect(() => {
+    if (!isLoading) return
+    
+    const interval = setInterval(() => {
+      setDots(prev => prev.length >= 3 ? '' : prev + '.')
+    }, 500)
+    
+    return () => clearInterval(interval)
+  }, [isLoading])
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -124,7 +135,7 @@ export function ChatCanvas({ messages, isLoading = false }: ChatCanvasProps) {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <Loader2 size={16} className="animate-spin" />
-                    <span>Thinking...</span>
+                    <span>Thinking{dots}</span>
                   </div>
                 </div>
               </div>
