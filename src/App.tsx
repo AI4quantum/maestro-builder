@@ -188,7 +188,7 @@ function App() {
 
 
     let stopStatusPolling: (() => void) | undefined
-    const startPollingForRequest = (requestChatId: string) => {
+    const startPollingForRequest = (requestChatId: string, activeChatId: string) => {
       stopStatusPolling = apiService.startStatusPolling(requestChatId, (updates) => {
         updates.forEach(update => {
           setMessages(prev => prev.map(m => 
@@ -198,13 +198,56 @@ function App() {
           ))
         })
       })
+      
+      // Also poll for YAML files during status updates
+      const yamlPollingInterval = setInterval(async () => {
+        if (activeChatId) {
+          try {
+            console.log('🔍 Polling for YAML files with chat ID:', activeChatId)
+            const yamlFiles = await apiService.getYamlFiles(activeChatId)
+            console.log('📄 YAML files received:', yamlFiles?.length || 0, 'files')
+            
+            if (yamlFiles && yamlFiles.length > 0) {
+              const agentsFile = yamlFiles.find(f => f.name === 'agents.yaml')
+              console.log('🔎 Agents file found:', !!agentsFile, 'has content:', !!agentsFile?.content?.trim())
+              
+              if (agentsFile && agentsFile.content.trim()) {
+                console.log('🎉 Found agents.yaml! Updating UI immediately')
+                console.log('📝 Agents content preview:', agentsFile.content.substring(0, 100) + '...')
+                setYamlFiles(yamlFiles)
+                setActiveYamlTab('agents.yaml')
+                clearInterval(yamlPollingInterval)
+              }
+            } else {
+              console.log('📭 No YAML files found yet')
+            }
+          } catch (error) {
+            console.log('⚠️ YAML polling error:', error)
+          }
+        } else {
+          console.log('⚠️ No activeChatId available for YAML polling')
+        }
+      }, 1500)
+      const originalStop = stopStatusPolling
+      stopStatusPolling = () => {
+        clearInterval(yamlPollingInterval)
+        if (originalStop) originalStop()
+      }
     }
     try {
-      const { requestId } = await apiService.sendMessageAsync(content, currentChatId || undefined);
-      startPollingForRequest(requestId);
+      const { requestId, chatId } = await apiService.sendMessageAsync(content, currentChatId || undefined);
+    
+      if (!currentChatId) {
+        console.log('🆔 Setting currentChatId to:', chatId);
+        setCurrentChatId(chatId);
+      } else {
+        console.log('🆔 Using existing currentChatId:', currentChatId);
+      }
+      
+      startPollingForRequest(requestId, currentChatId || chatId);
       let apiResponse: any = null;
       let attempts = 0;
-      const maxAttempts = 120;
+      const maxAttempts = 240;
       
       while (attempts < maxAttempts && !apiResponse) {
         await new Promise(resolve => setTimeout(resolve, 1000));

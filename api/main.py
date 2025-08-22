@@ -684,6 +684,7 @@ class AsyncSupervisorResponse(BaseModel):
     request_id: str
     status: str
     message: str
+    chat_id: str
 
 def store_request_result(request_id: str, result):
     """Store the result of a background request."""
@@ -771,7 +772,8 @@ async def supervisor_route_async(request: SupervisorRequest):
     return AsyncSupervisorResponse(
         request_id=request_id,
         status="processing",
-        message="Request started, use the request_id to poll for status and results"
+        message="Request started, use the request_id to poll for status and results",
+        chat_id=chat_id
     )
 
 

@@ -357,7 +357,7 @@ Example valid responses:
         workflow_prompt += f"\nprompt: {user_input}"
         return workflow_prompt
 
-    def process_complete_workflow_generation(self, user_input: str) -> Tuple[str, str]:
+    def process_complete_workflow_generation(self, user_input: str, chat_id: str = None, db_instance=None) -> Tuple[str, str]:
         """
         Process complete workflow generation (both agents and workflow).
         
@@ -373,6 +373,16 @@ Example valid responses:
         self._log("🚀 Starting complete workflow generation process...")
         
         agents_yaml = self.generate_agents_yaml(user_input)
+        self._log("✅ agents.yaml generated!")
+        
+        # Immediately save agents.yaml to database so frontend can see it
+        if chat_id and db_instance:
+            try:
+                db_instance.update_yaml_files(chat_id, {"agents.yaml": agents_yaml})
+                self._log("💾 Saved agents.yaml to database for immediate viewing")
+            except Exception as e:
+                self._log(f"⚠️ Could not save agents.yaml immediately: {e}", "warning")
+            
         self._log("🔍 Parsing generated agents for workflow creation...")
         agents_info = self.parse_agents_yaml_to_info(agents_yaml)
         self._log(f"📋 Found {len(agents_info)} agents to include in workflow")
@@ -492,7 +502,7 @@ Example valid responses:
             # Handle GENERATE_WORKFLOW intent
             status_logger("🎯 Routing to workflow generation...")
             
-            agents_yaml, workflow_yaml = logged_supervisor.process_complete_workflow_generation(content)
+            agents_yaml, workflow_yaml = logged_supervisor.process_complete_workflow_generation(content, chat_id, db_instance)
             
             response_text = logged_supervisor.build_success_response(
                 Intent.GENERATE_WORKFLOW, content

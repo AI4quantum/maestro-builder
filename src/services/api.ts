@@ -108,7 +108,7 @@ class ApiService {
     }
   }
 
-  async sendMessageAsync(message: string, chatId?: string): Promise<{requestId: string}> {
+  async sendMessageAsync(message: string, chatId?: string): Promise<{requestId: string, chatId: string}> {
     const response = await fetch(`${API_BASE_URL}/api/supervisor-async`, {
       method: 'POST',
       headers: {
@@ -124,7 +124,7 @@ class ApiService {
     }
 
     const data = await response.json()
-    return { requestId: data.request_id }
+    return { requestId: data.request_id, chatId: data.chat_id }
   }
 
   async getAsyncResult(requestId: string): Promise<ChatResponse | null> {
