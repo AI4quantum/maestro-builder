@@ -28,7 +28,7 @@ export function Sidebar({ chatHistory, currentChatId, onLoadChat, onCreateChat, 
 
   const truncateText = (text: string, maxLength: number = 50) => {
     if (text.length <= maxLength) return text
-    return text.substring(0, maxLength) + '...'
+    return text.substring(0, maxLength)
   }
 
   const handleDeleteAll = async () => {

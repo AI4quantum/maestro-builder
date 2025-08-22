@@ -4,14 +4,13 @@ import { Send, Paperclip, Mic, ChevronDown, Lightbulb } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 interface ChatInputProps {
-  onSendMessage: (message: string, useStreaming: boolean) => void
-  onEditYaml?: (instruction: string) => void
+  onSendMessage: (message: string) => void
   disabled?: boolean
   streamingEnabled?: boolean
   onToggleStreaming?: (enabled: boolean) => void
 }
 
-export function ChatInput({ onSendMessage, onEditYaml, disabled = false, streamingEnabled = true, onToggleStreaming }: ChatInputProps) {
+export function ChatInput({ onSendMessage, disabled = false, streamingEnabled = true, onToggleStreaming }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -39,7 +38,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false, streami
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
-      onSendMessage(message.trim(), streamingEnabled)
+      onSendMessage(message.trim())
       setMessage('')
       setIsTyping(false)
     }
@@ -54,7 +53,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false, streami
 
   const handleSuggestionClick = (suggestion: string) => {
     if (!disabled) {
-      onSendMessage(suggestion, streamingEnabled)
+      onSendMessage(suggestion)
       setShowSuggestions(false)
     }
   }
@@ -74,21 +73,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false, streami
             <Paperclip size={20} />
           </button>
 
-          {/* Edit YAML Button */}
-          {onEditYaml && (
-            <button
-              className="p-2 text-gray-400 hover:text-blue-600 transition-colors rounded-xl hover:bg-blue-50 disabled:opacity-50"
-              disabled={disabled}
-              title="Edit YAML with an instruction"
-              onClick={() => {
-                const defaultInstruction = 'Please edit the YAML as needed.';
-                console.log('Edit YAML button clicked, auto-submitting with instruction:', defaultInstruction);
-                onEditYaml(defaultInstruction);
-              }}
-            >
-              Edit YAML
-            </button>
-          )}
+
 
           {/* Suggestions Dropdown */}
           <div className="relative" ref={dropdownRef}>
@@ -156,7 +141,7 @@ export function ChatInput({ onSendMessage, onEditYaml, disabled = false, streami
                 }
               }}
               onKeyDown={handleKeyDown}
-              placeholder={disabled ? "Processing..." : "Ask me to help you build your Maestro workflow..."}
+              placeholder={disabled ? "Processing" : "Ask me to help you build your Maestro workflow"}
               className="w-full h-full min-h-[44px] max-h-32 resize-none bg-transparent border-none outline-none text-base placeholder:text-gray-400 leading-relaxed disabled:opacity-50 font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]"
               rows={1}
               disabled={disabled}
