@@ -359,7 +359,7 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
           {isLoading && (
             <div className="flex items-center gap-2 text-xs text-blue-600">
               <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-              <span>Updating...</span>
+              <span>Updating</span>
             </div>
           )}
           <button
@@ -469,7 +469,7 @@ export function YamlPanel({ yamlFiles, isLoading = false, activeTab, setActiveTa
                   {isValidating ? (
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-                      <span className="text-xs">Validating...</span>
+                      <span className="text-xs">Validating</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1">

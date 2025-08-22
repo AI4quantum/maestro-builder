@@ -182,7 +182,7 @@ function App() {
     setMessages(prev => [...prev, {
       id: assistantLogId,
       role: 'assistant',
-      content: 'Starting…',
+      content: 'Starting',
       timestamp: new Date()
     }])
 
@@ -213,7 +213,7 @@ function App() {
               
               if (agentsFile && agentsFile.content.trim()) {
                 console.log('🎉 Found agents.yaml! Updating UI immediately')
-                console.log('📝 Agents content preview:', agentsFile.content.substring(0, 100) + '...')
+                console.log('📝 Agents content preview:', agentsFile.content.substring(0, 100))
                 setYamlFiles(yamlFiles)
                 setActiveYamlTab('agents.yaml')
                 clearInterval(yamlPollingInterval)

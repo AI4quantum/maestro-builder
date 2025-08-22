@@ -323,7 +323,7 @@ class ApiService {
 
   async deleteAllChatSessions(): Promise<boolean> {
     try {
-      console.log('API: Calling delete all chat sessions endpoint...')
+      console.log('API: Calling delete all chat sessions endpoint')
       const response = await fetch(`${API_BASE_URL}/api/delete_all_chats`, {
         method: 'DELETE'
       })

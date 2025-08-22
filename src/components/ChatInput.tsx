@@ -141,7 +141,7 @@ export function ChatInput({ onSendMessage, disabled = false, streamingEnabled = 
                 }
               }}
               onKeyDown={handleKeyDown}
-              placeholder={disabled ? "Processing..." : "Ask me to help you build your Maestro workflow..."}
+              placeholder={disabled ? "Processing" : "Ask me to help you build your Maestro workflow"}
               className="w-full h-full min-h-[44px] max-h-32 resize-none bg-transparent border-none outline-none text-base placeholder:text-gray-400 leading-relaxed disabled:opacity-50 font-['Inter',-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]"
               rows={1}
               disabled={disabled}

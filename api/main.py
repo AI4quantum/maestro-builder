@@ -325,7 +325,7 @@ async def generate_stream(message: ChatMessage):
             await asyncio.sleep(0)
             yield to_line({"type": "status", "message": "(Planning agents)"})
             await asyncio.sleep(0)
-            yield to_line({"type": "status", "message": "Generating agents.yaml..."})
+            yield to_line({"type": "status", "message": "Generating agents.yaml"})
             await asyncio.sleep(0)
 
             agents_output, agents_yaml = await generate_agents_yaml(message.content)
@@ -369,7 +369,7 @@ async def generate_stream(message: ChatMessage):
 
             yield to_line({"type": "status", "message": "(Building workflow prompt)"})
             await asyncio.sleep(0)
-            yield to_line({"type": "status", "message": "Generating workflow.yaml..."})
+            yield to_line({"type": "status", "message": "Generating workflow.yaml"})
             await asyncio.sleep(0)
 
             async with httpx.AsyncClient(timeout=180) as client:
