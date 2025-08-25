@@ -33,6 +33,7 @@ spec:
     - Try to combine related logic into a single agent when it simplifies the workflow without losing clarity.
     - **Avoid duplicating tasks** across agents.
     - If the user’s request is vague, make **reasonable assumptions** and err on the side of simplicity.
+    - Ensure that no two agents have the same name.
 
     ## Examples:
 
