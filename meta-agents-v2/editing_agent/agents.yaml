@@ -5,7 +5,7 @@ metadata:
   labels:
     app: builder
 spec:
-  model: deepseek-r1:latest
+  model: gpt-oss:latest
   framework: openai
   mode: local
   description: |

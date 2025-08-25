@@ -5,7 +5,7 @@ metadata:
   labels:
     app: meta-agents-v2
 spec:
-  model: deepseek-r1:latest
+  model: gpt-oss:latest
   framework: openai
   mode: local
   description: "Parses user goals and converts them into a structured list of agents with descriptions."
@@ -33,6 +33,7 @@ spec:
     - Try to combine related logic into a single agent when it simplifies the workflow without losing clarity.
     - **Avoid duplicating tasks** across agents.
     - If the user’s request is vague, make **reasonable assumptions** and err on the side of simplicity.
+    - Ensure that no two agents have the same name.
 
     ## Examples:
 
@@ -71,7 +72,7 @@ metadata:
   labels:
     app: meta-agents-v2
 spec:
-  model: deepseek-r1:latest
+  model: gpt-oss:latest
   framework: openai
   mode: local
   description: "Generates valid agents.yaml files using either LLM or code agents depending on the task."
@@ -106,7 +107,7 @@ spec:
       labels:
         app: <generate>
     spec:
-      model: deepseek-r1:latest
+      model: gpt-oss:latest
       framework: openai
       mode: local
       description: |
@@ -144,7 +145,7 @@ spec:
       labels:
         app: generated
     spec:
-      model: deepseek-r1:latest
+      model: gpt-oss:latest
       framework: openai
       mode: local
       description: |
