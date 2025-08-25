@@ -5,7 +5,7 @@ metadata:
   labels:
     app: meta-agents-v2
 spec:
-  model: deepseek-r1:latest
+  model: gpt-oss:latest
   framework: openai
   mode: local
   description: "Parses user goals and converts them into a structured list of agents with descriptions."
@@ -71,7 +71,7 @@ metadata:
   labels:
     app: meta-agents-v2
 spec:
-  model: deepseek-r1:latest
+  model: gpt-oss:latest
   framework: openai
   mode: local
   description: "Generates valid agents.yaml files using either LLM or code agents depending on the task."
@@ -106,7 +106,7 @@ spec:
       labels:
         app: <generate>
     spec:
-      model: deepseek-r1:latest
+      model: gpt-oss:latest
       framework: openai
       mode: local
       description: |
@@ -144,7 +144,7 @@ spec:
       labels:
         app: generated
     spec:
-      model: deepseek-r1:latest
+      model: gpt-oss:latest
       framework: openai
       mode: local
       description: |
