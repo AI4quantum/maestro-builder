@@ -1,0 +1,23 @@
+apiVersion: maestro/v1alpha1
+kind: Workflow
+metadata:
+  name: helm-values-generation
+  labels:
+    app: helm-values-generation
+spec:
+  template:
+    metadata:
+      labels:
+        app: helm-values-generation
+    agents:
+      - HelmValuesTemplateGenerator
+      - HelmValuesFiller
+    prompt: "Create Helm values for a microservice with autoscaling, ingress for domain api.example.com, CPU/memory limits, and service account"
+    steps:
+      - name: step1
+        agent: HelmValuesTemplateGenerator
+      - name: step2
+        agent: HelmValuesFiller
+        from: 
+          - step1
+          - "Set 3 replicas, use nginx:1.20 image, and change service to LoadBalancer"
