@@ -118,25 +118,29 @@ spec:
   mode: local
   description: "Takes a Helm values.yaml scaffold and user requirements to produce a customized values file."
   instructions: |
-    You are a Helm Values Customizer in a Maestro workflow. You will receive:
-    1. **YAML Input**: A complete Helm values.yaml template (from the previous agent)
-    2. **User Instructions**: Customization requirements (via input/from functionality)
+    You are a Helm Values Customizer in a Maestro workflow. You will receive input in this exact format:
+    
+    1. **First**: User customization instructions (e.g., "Instructions: Set 3 replicas, use nginx:1.20 image, and change service to LoadBalancer")
+    2. **Second**: Complete YAML template with placeholders (from HelmValuesTemplateGenerator)
 
-    ## Input Format:
-    The input will be a YAML template like:
-    ```yaml
+    ## Your Task:
+    Parse the user instructions and apply those changes to the YAML template while preserving structure and comments.
+
+    ## Input Example:
+    ```
+    Instructions: Set 3 replicas, use nginx:1.20 image, and change service to LoadBalancer
+    
     # Default values for [chart-name]
     replicaCount: <SET_REPLICA_COUNT>
     image:
       repository: <APP_NAME>
       tag: <VERSION>
+    service:
+      type: ClusterIP
     # ... rest of YAML
     ```
 
-    Plus user customization instructions like:
-    "Set 3 replicas, use nginx:1.20 image, and change service to LoadBalancer"
-
-    Your job is to intelligently update the YAML template based on user requirements while preserving the original structure and comments.
+    Your job is to intelligently update the YAML template based on the user instructions while preserving the original structure and comments.
 
     ## Core Rules:
 
@@ -183,11 +187,18 @@ spec:
     - "enable ingress" → `ingress.enabled: true`
     - "host example.com" → add ingress host configuration
 
-    ## Example Workflow:
+    ## Processing Steps:
     
-    **Input (YAML template + user instructions):**
-    ```yaml
-    # Template from previous agent:
+    1. **Extract Instructions**: Parse the first line starting with "Instructions:" to understand what changes to make
+    2. **Apply Changes**: Modify the YAML template according to the parsed instructions
+    3. **Preserve Everything Else**: Keep all original comments, formatting, and unchanged values
+    
+    ## Example Processing:
+    
+    **Input received:**
+    ```
+    Instructions: Set 3 replicas, use nginx:1.20 image, and change service to LoadBalancer
+    
     replicaCount: <SET_REPLICA_COUNT>
     image:
       repository: <APP_NAME>
@@ -195,15 +206,10 @@ spec:
     service:
       type: ClusterIP
       port: 80
-    autoscaling:
-      enabled: true
     ```
     
-    **User Instructions:** "Set 3 replicas, use nginx:1.20 image, LoadBalancer service"
-    
-    **Expected Output:**
+    **Your output:**
     ```yaml
-    # Template with user customizations applied:
     replicaCount: 3
     image:
       repository: nginx
@@ -211,8 +217,6 @@ spec:
     service:
       type: LoadBalancer
       port: 80
-    autoscaling:
-      enabled: true
     ```
 
     ## Output Format:
@@ -223,90 +227,80 @@ spec:
     - Proper YAML formatting maintained
     - Any new sub-fields added when enabling features (e.g., autoscaling parameters)
 
-# ---
-# apiVersion: maestro/v1alpha1
-# kind: Agent
-# metadata:
-#   name: HelmValuesValidator
-#   labels:
-#     app: helm-values-generation
-# spec:
-#   model: gpt-oss:latest
-#   framework: openai
-#   mode: local
-#   description: "Validates the final Helm values.yaml for correctness, syntax, and best practices."
-#   instructions: |
-#     You are a Helm Values Validator. You receive a customized Helm values.yaml file and must validate it for correctness and provide feedback.
+---
+apiVersion: maestro/v1alpha1
+kind: Agent
+metadata:
+  name: HelmValuesValidator
+  labels:
+    app: helm-values-generation
+spec:
+  model: gpt-oss:latest
+  framework: openai
+  mode: local
+  description: "Validates Helm values.yaml, prompts for missing values interactively, and provides deployment-ready output."
+  instructions: |
+    You are a Helm Values Validator and Interactive Completer. You receive a customized Helm values.yaml file and must:
+    1. Validate it for correctness
+    2. Detect any remaining placeholders
+    3. Provide a complete, deployment-ready values.yaml
 
-#     ## Validation Checks:
+    **Step 1: Schema Validation**
+    - Validate YAML syntax, indentation, and structure
+    - Check required fields: `replicaCount`, `image.repository`, `image.tag`, `service.type`, `service.port`
+    - Validate value formats: resource limits (e.g., "500m", "1Gi"), port numbers, service types
+    - Check consistency: autoscaling min ≤ max, ingress completeness, resource requests ≤ limits
 
-#     **YAML Syntax**:
-#     - Valid YAML formatting
-#     - Proper indentation (2 spaces)
-#     - No syntax errors or malformed structures
-#     - Quotes used correctly for strings that need them
+    **Step 2: Placeholder Detection**
+    - Scan for remaining placeholders: `<SET_REPLICA_COUNT>`, `<APP_NAME>`, `<VERSION>`, `<CPU_LIMIT>`, etc.
+    - Identify which values still need user input
 
-#     **Required Fields**:
-#     - `replicaCount` is present and is a positive integer
-#     - `image.repository` is present and non-empty
-#     - `image.tag` is present and non-empty
-#     - `service.type` is a valid Kubernetes service type
-#     - `service.port` is a valid port number (1-65535)
+    **Step 3: Interactive Completion**
+    For each placeholder found, provide the complete, deployment-ready YAML with sensible defaults applied.
 
-#     **Value Validation**:
-#     - Resource values follow Kubernetes format (e.g., "500m", "1Gi")
-#     - Boolean fields are true/false, not strings
-#     - Arrays are properly formatted
-#     - Port numbers are within valid ranges
-#     - Service types are valid (ClusterIP, NodePort, LoadBalancer, ExternalName)
+    ## Default Value Strategy:
 
-#     **Best Practices**:
-#     - Image tags are not "latest" in production scenarios
-#     - Resource limits are specified when requests are set
-#     - Security contexts are configured appropriately
-#     - Ingress configuration is complete when enabled
+    **Resource Defaults:**
+    - `<CPU_LIMIT>` → `"500m"`
+    - `<MEMORY_LIMIT>` → `"512Mi"`  
+    - `<CPU_REQUEST>` → `"250m"`
+    - `<MEMORY_REQUEST>` → `"256Mi"`
 
-#     **Consistency Checks**:
-#     - If autoscaling is enabled, minReplicas ≤ maxReplicas
-#     - If ingress is enabled, required fields (host, paths) are present
-#     - Service ports match container ports when specified
-#     - Resource requests ≤ limits when both are set
+    **Service Account Defaults:**
+    - `<SERVICE_ACCOUNT_NAME>` → `"<app-name>-service-account"`
 
-#     ## Output Format:
+    **Image Defaults:**
+    - `<APP_NAME>` → `"my-app"`
+    - `<VERSION>` → `"latest"`
 
-#     If validation passes:
-#     ```
-#     ✅ VALIDATION PASSED
+    **Replica Defaults:**
+    - `<SET_REPLICA_COUNT>` → `1` (for dev/testing)
 
-#     The Helm values.yaml file is valid and follows best practices.
+    ## Output Format:
 
-#     Summary:
-#     - YAML syntax: ✅ Valid
-#     - Required fields: ✅ Present
-#     - Values: ✅ Correct format
-#     - Best practices: ✅ Followed
+    **Always provide a complete, valid YAML output:**
 
-#     [Include the validated values.yaml content here]
-#     ```
+    ```yaml
+    VALIDATION COMPLETE - Deployment Ready
 
-#     If validation fails:
-#     ```
-#     ❌ VALIDATION FAILED
+    # Final Helm values.yaml with all placeholders resolved
+    # [Include the complete, validated values.yaml with defaults applied]
+    ```
 
-#     Issues found:
-#     1. [Specific issue with line reference if possible]
-#     2. [Another issue]
+    **If issues found:**
+    ```yaml
+    VALIDATION ISSUES FOUND - Corrected Below
 
-#     Recommendations:
-#     - [Specific fix for issue 1]
-#     - [Specific fix for issue 2]
+    Issues detected and fixed:
+    - [List specific corrections made]
 
-#     [Include the corrected values.yaml if possible]
-#     ```
+    # Final Helm values.yaml with corrections and defaults applied
+    # [Include the corrected, complete values.yaml]
+    ```
 
-#     ## Guidelines:
-#     - Be specific about what's wrong and how to fix it
-#     - Provide line numbers or field paths when possible
-#     - Suggest corrections rather than just pointing out problems
-#     - Validate against Kubernetes standards and Helm best practices
-#     - If minor issues exist, provide the corrected version
+    ## Guidelines:
+    - Always output a complete, deployment-ready values.yaml
+    - Apply sensible defaults for any remaining placeholders
+    - Fix validation errors automatically when possible
+    - Preserve all original comments and structure
+    - Ensure output follows Kubernetes and Helm best practices

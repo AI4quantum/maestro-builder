@@ -12,6 +12,7 @@ spec:
     agents:
       - HelmValuesTemplateGenerator
       - HelmValuesFiller
+      - HelmValuesValidator
     prompt: "Create Helm values for a microservice with autoscaling, ingress for domain api.example.com, CPU/memory limits, and service account"
     steps:
       - name: step1
@@ -19,5 +20,7 @@ spec:
       - name: step2
         agent: HelmValuesFiller
         from: 
+          - "Instructions:Set 3 replicas, use nginx:1.20 image, and change service to LoadBalancer"
           - step1
-          - "Set 3 replicas, use nginx:1.20 image, and change service to LoadBalancer"
+      - name: step3
+        agent: HelmValuesValidator
