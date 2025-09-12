@@ -1,312 +1,143 @@
 apiVersion: maestro/v1alpha1
 kind: Agent
 metadata:
-  name: HelmValuesTemplateGenerator
+  name: helm-chart-ingestor
   labels:
-    app: helm-values-generation
+    app: helm-generation
 spec:
-  model: gpt-oss:latest
-  framework: openai
+  framework: code
   mode: local
-  description: "Creates a minimal Helm values.yaml scaffold with mandatory fields and only the optional sections the user specifically requests."
+  description: Ingest Helm charts from GitHub URLs and return structured ChartBundle JSON
   instructions: |
-    You are a Helm Values Template Generator. Your job is to create a clean, minimal Helm values.yaml scaffold that includes ONLY what the user needs.
-
-    ## Core Requirements:
-
-    **MANDATORY FIELDS** (always include these):
-    - `replicaCount: <SET_REPLICA_COUNT>`  # Use placeholder, don't hardcode
-    - `image:` section with repository, tag, and pullPolicy
-    - `service:` section with type and port
-
-    **OPTIONAL FIELDS** (only include if user mentions them):
-    - `resources:` - only if user mentions CPU, memory, limits, or resources
-    - `ingress:` - only if user mentions ingress, domain, host, or external access
-    - `autoscaling:` - only if user mentions autoscaling, HPA, or scaling
-    - `serviceAccount:` - only if user mentions service account or RBAC
-    - `podAnnotations:` - only if user mentions pod annotations
-    - `podSecurityContext:` - only if user mentions security context
-    - `securityContext:` - only if user mentions container security
-    - `nodeSelector:` - only if user mentions node selection or scheduling
-    - `tolerations:` - only if user mentions tolerations or taints
-    - `affinity:` - only if user mentions affinity or pod placement
-
-    ## Input Parsing:
-    Analyze the user's request to detect what features they need:
-    - "autoscaling" or "scale" → include autoscaling section
-    - "ingress" or "domain" or "external" → include ingress section  
-    - "resources" or "CPU" or "memory" → include resources section
-    - "service account" or "RBAC" → include serviceAccount section
-    - DO NOT include sections the user doesn't mention
-
-    ## Output Format:
-    Produce a valid YAML structure with:
-    - Clear, helpful comments explaining each field's purpose
-    - Proper YAML indentation
-    - Consistent naming conventions
-    - Comments starting with `#` on separate lines above each section
-
-    ## Example Output (Minimal - user only mentions "LoadBalancer service"):
-    ```yaml
-    # Default values for [chart-name].
-    # This is a YAML-formatted file.
-
-    # Number of replicas to deploy (set based on environment needs)
-    replicaCount: <SET_REPLICA_COUNT>
-
-    # Container image configuration
-    image:
-      repository: <APP_NAME>
-      tag: <VERSION>
-      pullPolicy: IfNotPresent
-
-    # Service configuration
-    service:
-      type: ClusterIP
-      port: 80
-    ```
-
-    ## Example Output (With Optional Features - user mentions "autoscaling and ingress"):
-    ```yaml
-    # Default values for [chart-name].
-    # This is a YAML-formatted file.
-
-    # Number of replicas to deploy
-    replicaCount: <SET_REPLICA_COUNT>
-
-    # Container image configuration
-    image:
-      repository: <APP_NAME>
-      tag: <VERSION>
-      pullPolicy: IfNotPresent
-
-    # Service configuration
-    service:
-      type: ClusterIP
-      port: 80
-
-    # Horizontal Pod Autoscaler configuration
-    autoscaling:
-      enabled: false
-      minReplicas: 1
-      maxReplicas: 10
-
-    # Ingress configuration
-    ingress:
-      enabled: false
-      host: <DOMAIN_NAME>
-    ```
-
-    ## Guidelines:
-    - Always start with a comment header
-    - Use consistent 2-space indentation
-    - Group related fields together
-    - Provide meaningful default values for mandatory fields
-    - Keep optional sections minimal but properly structured
-    - Include comments explaining when/why to enable optional features
-
----
-apiVersion: maestro/v1alpha1
-kind: Agent
-metadata:
-  name: HelmValuesFiller
-  labels:
-    app: helm-values-generation
-spec:
-  model: gpt-oss:latest
-  framework: openai
-  mode: local
-  description: "Takes a Helm values.yaml scaffold and user requirements to produce a customized values file."
-  instructions: |
-    You are a Helm Values Customizer in a Maestro workflow. You will receive:
-    1. **YAML Input**: A complete Helm values.yaml template (from the previous agent)
-    2. **User Instructions**: Customization requirements (via input/from functionality)
-
-    ## Input Format:
-    The input will be a YAML template like:
-    ```yaml
-    # Default values for [chart-name]
-    replicaCount: <SET_REPLICA_COUNT>
-    image:
-      repository: <APP_NAME>
-      tag: <VERSION>
-    # ... rest of YAML
-    ```
-
-    Plus user customization instructions like:
-    "Set 3 replicas, use nginx:1.20 image, and change service to LoadBalancer"
-
-    Your job is to intelligently update the YAML template based on user requirements while preserving the original structure and comments.
-
-    ## Core Rules:
-
-    **PRESERVE STRUCTURE**:
-    - Keep all existing comments and formatting
-    - Maintain the same YAML structure and key organization
-    - Don't remove sections unless explicitly requested
-    - Preserve indentation and spacing
-
-    **UPDATE VALUES**:
-    - Replace placeholders and modify values based on user instructions
-    - `<SET_REPLICA_COUNT>` + "3 replicas" → `replicaCount: 3`
-    - `<APP_NAME>` + "nginx" → `image.repository: nginx`
-    - `<VERSION>` + "1.20" → `image.tag: "1.20"`
-    - "LoadBalancer service" → `service.type: LoadBalancer`
-    - "disable autoscaling" → `autoscaling.enabled: false`
-    - If user doesn't mention a placeholder, leave it as-is for later customization
-
-    **DON'T INVENT**:
-    - Don't add new top-level keys not in the original scaffold
-    - Don't create new sections unless user explicitly requests them
-    - Stick to the schema provided by the template
-
-    ## Common User Requirements Patterns:
-
-    **Scaling**:
-    - "3 replicas" → `replicaCount: 3`
-    - "autoscaling min 2 max 10" → enable autoscaling with minReplicas/maxReplicas
-
-    **Service Types**:
-    - "LoadBalancer" → `service.type: LoadBalancer`
-    - "NodePort" → `service.type: NodePort`
-    - "expose on port 8080" → `service.port: 8080`
-
-    **Image Configuration**:
-    - "nginx:1.20" → update image repository and tag
-    - "Always pull" → `image.pullPolicy: Always`
-
-    **Resources**:
-    - "CPU limit 500m" → add CPU limits to resources
-    - "Memory 1Gi" → add memory requests/limits
-
-    **Ingress**:
-    - "enable ingress" → `ingress.enabled: true`
-    - "host example.com" → add ingress host configuration
-
-    ## Example Workflow:
+    Takes a GitHub URL to a Helm chart and returns structured metadata including:
+    - Chart metadata (name, version)
+    - Default values from values.yaml
+    - Optional JSON schema
+    - Discovered .Values.* keys from templates
+    - Required field hints with error messages
     
-    **Input (YAML template + user instructions):**
-    ```yaml
-    # Template from previous agent:
-    replicaCount: <SET_REPLICA_COUNT>
-    image:
-      repository: <APP_NAME>
-      tag: <VERSION>
-    service:
-      type: ClusterIP
-      port: 80
-    autoscaling:
-      enabled: true
-    ```
-    
-    **User Instructions:** "Set 3 replicas, use nginx:1.20 image, LoadBalancer service"
-    
-    **Expected Output:**
-    ```yaml
-    # Template with user customizations applied:
-    replicaCount: 3
-    image:
-      repository: nginx
-      tag: "1.20"
-    service:
-      type: LoadBalancer
-      port: 80
-    autoscaling:
-      enabled: true
-    ```
+    Supports URLs like:
+    - https://github.com/owner/repo
+    - https://github.com/owner/repo/tree/ref/subdir
+  code: |
+    import json, os, re, tempfile, urllib.parse, zipfile
+    from io import BytesIO
+    from pathlib import Path
+    import requests, yaml
 
-    ## Output Format:
-    Return the complete updated values.yaml file with:
-    - All original comments preserved
-    - Placeholders replaced with user-specified values
-    - Only the requested values modified
-    - Proper YAML formatting maintained
-    - Any new sub-fields added when enabling features (e.g., autoscaling parameters)
-
-# ---
-# apiVersion: maestro/v1alpha1
-# kind: Agent
-# metadata:
-#   name: HelmValuesValidator
-#   labels:
-#     app: helm-values-generation
-# spec:
-#   model: gpt-oss:latest
-#   framework: openai
-#   mode: local
-#   description: "Validates the final Helm values.yaml for correctness, syntax, and best practices."
-#   instructions: |
-#     You are a Helm Values Validator. You receive a customized Helm values.yaml file and must validate it for correctness and provide feedback.
-
-#     ## Validation Checks:
-
-#     **YAML Syntax**:
-#     - Valid YAML formatting
-#     - Proper indentation (2 spaces)
-#     - No syntax errors or malformed structures
-#     - Quotes used correctly for strings that need them
-
-#     **Required Fields**:
-#     - `replicaCount` is present and is a positive integer
-#     - `image.repository` is present and non-empty
-#     - `image.tag` is present and non-empty
-#     - `service.type` is a valid Kubernetes service type
-#     - `service.port` is a valid port number (1-65535)
-
-#     **Value Validation**:
-#     - Resource values follow Kubernetes format (e.g., "500m", "1Gi")
-#     - Boolean fields are true/false, not strings
-#     - Arrays are properly formatted
-#     - Port numbers are within valid ranges
-#     - Service types are valid (ClusterIP, NodePort, LoadBalancer, ExternalName)
-
-#     **Best Practices**:
-#     - Image tags are not "latest" in production scenarios
-#     - Resource limits are specified when requests are set
-#     - Security contexts are configured appropriately
-#     - Ingress configuration is complete when enabled
-
-#     **Consistency Checks**:
-#     - If autoscaling is enabled, minReplicas ≤ maxReplicas
-#     - If ingress is enabled, required fields (host, paths) are present
-#     - Service ports match container ports when specified
-#     - Resource requests ≤ limits when both are set
-
-#     ## Output Format:
-
-#     If validation passes:
-#     ```
-#     ✅ VALIDATION PASSED
-
-#     The Helm values.yaml file is valid and follows best practices.
-
-#     Summary:
-#     - YAML syntax: ✅ Valid
-#     - Required fields: ✅ Present
-#     - Values: ✅ Correct format
-#     - Best practices: ✅ Followed
-
-#     [Include the validated values.yaml content here]
-#     ```
-
-#     If validation fails:
-#     ```
-#     ❌ VALIDATION FAILED
-
-#     Issues found:
-#     1. [Specific issue with line reference if possible]
-#     2. [Another issue]
-
-#     Recommendations:
-#     - [Specific fix for issue 1]
-#     - [Specific fix for issue 2]
-
-#     [Include the corrected values.yaml if possible]
-#     ```
-
-#     ## Guidelines:
-#     - Be specific about what's wrong and how to fix it
-#     - Provide line numbers or field paths when possible
-#     - Suggest corrections rather than just pointing out problems
-#     - Validate against Kubernetes standards and Helm best practices
-#     - If minor issues exist, provide the corrected version
+    try:
+        # Handle different input formats
+        if isinstance(input, dict):
+            url = input.get("url", "").rstrip('/')
+        elif isinstance(input, (list, tuple)) and len(input) > 0:
+            url = str(input[0]).rstrip('/')
+        else:
+            url = str(input).rstrip('/') if input else ""
+        
+        if not url:
+            raise ValueError("No URL provided")
+        
+        # Parse GitHub URL
+        parts = [p for p in urllib.parse.urlparse(url).path.split('/') if p]
+        if len(parts) < 2:
+            raise ValueError("Invalid GitHub URL")
+        
+        owner, repo = parts[0], parts[1]
+        ref = parts[3] if len(parts) >= 4 and parts[2] == 'tree' else None
+        subdir = '/'.join(parts[4:]) if len(parts) > 4 else None
+        
+        # Setup headers once
+        headers = {}
+        if 'GITHUB_TOKEN' in os.environ:
+            headers['Authorization'] = f'token {os.environ["GITHUB_TOKEN"]}'
+        
+        # Get default branch if needed
+        if not ref:
+            resp = requests.get(f"https://api.github.com/repos/{owner}/{repo}", headers=headers, timeout=30)
+            ref = resp.json()['default_branch']
+        
+        # Download and extract repo
+        resp = requests.get(f"https://api.github.com/repos/{owner}/{repo}/zipball/{ref}", headers=headers, timeout=120)
+        resp.raise_for_status()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Extract ZIP
+            with zipfile.ZipFile(BytesIO(resp.content)) as zf:
+                zf.extractall(temp_dir)
+            
+            # Find archive root (GitHub extracts to single dir)
+            archive_root = next(Path(temp_dir).iterdir())
+            
+            # Find chart root
+            if subdir:
+                chart_root = archive_root / subdir
+                if not (chart_root / "Chart.yaml").exists():
+                    raise ValueError(f"No Chart.yaml in {subdir}")
+            else:
+                # Search for Chart.yaml
+                candidates = [Path(root) for root, dirs, files in os.walk(archive_root) if "Chart.yaml" in files]
+                if not candidates:
+                    raise ValueError("No Chart.yaml found")
+                if len(candidates) > 1:
+                    raise ValueError(f"Multiple charts found")
+                chart_root = candidates[0]
+            
+            # Parse files
+            chart_yaml = yaml.safe_load(open(chart_root / "Chart.yaml"))
+            
+            defaults = {}
+            if (chart_root / "values.yaml").exists():
+                defaults = yaml.safe_load(open(chart_root / "values.yaml")) or {}
+            
+            schema = None
+            if (chart_root / "values.schema.json").exists():
+                try:
+                    schema = json.load(open(chart_root / "values.schema.json"))
+                except:
+                    pass
+            
+            # Scan templates for .Values references (simplified)
+            discovered_keys = set()
+            required_hints = []
+            templates_dir = chart_root / "templates"
+            
+            if templates_dir.exists():
+                for file_path in templates_dir.rglob("*.yaml"):
+                    try:
+                        content = file_path.read_text()
+                        # Simple .Values extraction - just look for .Values.key patterns
+                        for match in re.finditer(r'\.Values\.([A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)*)', content):
+                            discovered_keys.add(match.group(1))
+                        
+                        # Simple required detection
+                        for line_num, line in enumerate(content.split('\n'), 1):
+                            if 'required "' in line and '.Values.' in line:
+                                msg_match = re.search(r'required\s+"([^"]+)"', line)
+                                val_match = re.search(r'\.Values\.([A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)*)', line)
+                                if msg_match and val_match:
+                                    required_hints.append({
+                                        "path": val_match.group(1),
+                                        "message": msg_match.group(1),
+                                        "source": {"file": str(file_path.relative_to(chart_root)), "line": line_num}
+                                    })
+                    except:
+                        continue
+            
+            # Build output
+            output.update({
+                "meta": {
+                    "repo": f"{owner}/{repo}",
+                    "ref": ref,
+                    "chartRoot": str(chart_root.relative_to(archive_root)),
+                    "chartName": chart_yaml.get("name", "unknown"),
+                    "version": chart_yaml.get("version")
+                },
+                "defaults": defaults,
+                "schema": schema,
+                "discoveredKeys": sorted(discovered_keys),
+                "requiredHints": sorted(required_hints, key=lambda x: x["source"]["file"]),
+                "docs": None
+            })
+            
+    except Exception as e:
+        output.update({"error": str(e), "defaults": {}, "schema": None, "discoveredKeys": [], "requiredHints": [], "docs": None})
