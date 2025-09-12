@@ -37,7 +37,6 @@ spec:
         if not url:
             raise ValueError("No URL provided")
         
-        # Parse GitHub URL
         parts = [p for p in urllib.parse.urlparse(url).path.split('/') if p]
         if len(parts) < 2:
             raise ValueError("Invalid GitHub URL")
@@ -46,17 +45,14 @@ spec:
         ref = parts[3] if len(parts) >= 4 and parts[2] == 'tree' else None
         subdir = '/'.join(parts[4:]) if len(parts) > 4 else None
         
-        # Setup headers once
         headers = {}
         if 'GITHUB_TOKEN' in os.environ:
             headers['Authorization'] = f'token {os.environ["GITHUB_TOKEN"]}'
         
-        # Get default branch if needed
         if not ref:
             resp = requests.get(f"https://api.github.com/repos/{owner}/{repo}", headers=headers, timeout=30)
             ref = resp.json()['default_branch']
         
-        # Download and extract repo
         resp = requests.get(f"https://api.github.com/repos/{owner}/{repo}/zipball/{ref}", headers=headers, timeout=120)
         resp.raise_for_status()
         
@@ -64,52 +60,37 @@ spec:
             # Extract ZIP
             with zipfile.ZipFile(BytesIO(resp.content)) as zf:
                 zf.extractall(temp_dir)
-            
-            # Find archive root (GitHub extracts to single dir)
             archive_root = next(Path(temp_dir).iterdir())
-            
-            # Find chart root
             if subdir:
                 chart_root = archive_root / subdir
                 if not (chart_root / "Chart.yaml").exists():
                     raise ValueError(f"No Chart.yaml in {subdir}")
             else:
-                # Search for Chart.yaml
                 candidates = [Path(root) for root, dirs, files in os.walk(archive_root) if "Chart.yaml" in files]
                 if not candidates:
                     raise ValueError("No Chart.yaml found")
                 if len(candidates) > 1:
                     raise ValueError(f"Multiple charts found")
                 chart_root = candidates[0]
-            
-            # Parse files
             chart_yaml = yaml.safe_load(open(chart_root / "Chart.yaml"))
-            
             defaults = {}
             if (chart_root / "values.yaml").exists():
                 defaults = yaml.safe_load(open(chart_root / "values.yaml")) or {}
-            
             schema = None
             if (chart_root / "values.schema.json").exists():
                 try:
                     schema = json.load(open(chart_root / "values.schema.json"))
                 except:
                     pass
-            
-            # Scan templates for .Values references (simplified)
             discovered_keys = set()
             required_hints = []
             templates_dir = chart_root / "templates"
-            
             if templates_dir.exists():
                 for file_path in templates_dir.rglob("*.yaml"):
                     try:
                         content = file_path.read_text()
-                        # Simple .Values extraction - just look for .Values.key patterns
                         for match in re.finditer(r'\.Values\.([A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)*)', content):
                             discovered_keys.add(match.group(1))
-                        
-                        # Simple required detection
                         for line_num, line in enumerate(content.split('\n'), 1):
                             if 'required "' in line and '.Values.' in line:
                                 msg_match = re.search(r'required\s+"([^"]+)"', line)
@@ -122,8 +103,6 @@ spec:
                                     })
                     except:
                         continue
-            
-            # Build output
             output.update({
                 "meta": {
                     "repo": f"{owner}/{repo}",
