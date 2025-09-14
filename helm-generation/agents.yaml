@@ -1,0 +1,122 @@
+apiVersion: maestro/v1alpha1
+kind: Agent
+metadata:
+  name: helm-chart-ingestor
+  labels:
+    app: helm-generation
+spec:
+  framework: code
+  mode: local
+  description: Ingest Helm charts from GitHub URLs and return structured ChartBundle JSON
+  instructions: |
+    Takes a GitHub URL to a Helm chart and returns structured metadata including:
+    - Chart metadata (name, version)
+    - Default values from values.yaml
+    - Optional JSON schema
+    - Discovered .Values.* keys from templates
+    - Required field hints with error messages
+    
+    Supports URLs like:
+    - https://github.com/owner/repo
+    - https://github.com/owner/repo/tree/ref/subdir
+  code: |
+    import json, os, re, tempfile, urllib.parse, zipfile
+    from io import BytesIO
+    from pathlib import Path
+    import requests, yaml
+
+    try:
+        # Handle different input formats
+        if isinstance(input, dict):
+            url = input.get("url", "").rstrip('/')
+        elif isinstance(input, (list, tuple)) and len(input) > 0:
+            url = str(input[0]).rstrip('/')
+        else:
+            url = str(input).rstrip('/') if input else ""
+        
+        if not url:
+            raise ValueError("No URL provided")
+        
+        parts = [p for p in urllib.parse.urlparse(url).path.split('/') if p]
+        if len(parts) < 2:
+            raise ValueError("Invalid GitHub URL")
+        
+        owner, repo = parts[0], parts[1]
+        ref = parts[3] if len(parts) >= 4 and parts[2] == 'tree' else None
+        subdir = '/'.join(parts[4:]) if len(parts) > 4 else None
+        
+        headers = {}
+        if 'GITHUB_TOKEN' in os.environ:
+            headers['Authorization'] = f'token {os.environ["GITHUB_TOKEN"]}'
+        
+        if not ref:
+            resp = requests.get(f"https://api.github.com/repos/{owner}/{repo}", headers=headers, timeout=30)
+            ref = resp.json()['default_branch']
+        
+        resp = requests.get(f"https://api.github.com/repos/{owner}/{repo}/zipball/{ref}", headers=headers, timeout=120)
+        resp.raise_for_status()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Extract ZIP
+            with zipfile.ZipFile(BytesIO(resp.content)) as zf:
+                zf.extractall(temp_dir)
+            archive_root = next(Path(temp_dir).iterdir())
+            if subdir:
+                chart_root = archive_root / subdir
+                if not (chart_root / "Chart.yaml").exists():
+                    raise ValueError(f"No Chart.yaml in {subdir}")
+            else:
+                candidates = [Path(root) for root, dirs, files in os.walk(archive_root) if "Chart.yaml" in files]
+                if not candidates:
+                    raise ValueError("No Chart.yaml found")
+                if len(candidates) > 1:
+                    raise ValueError(f"Multiple charts found")
+                chart_root = candidates[0]
+            chart_yaml = yaml.safe_load(open(chart_root / "Chart.yaml"))
+            defaults = {}
+            if (chart_root / "values.yaml").exists():
+                defaults = yaml.safe_load(open(chart_root / "values.yaml")) or {}
+            schema = None
+            if (chart_root / "values.schema.json").exists():
+                try:
+                    schema = json.load(open(chart_root / "values.schema.json"))
+                except:
+                    pass
+            discovered_keys = set()
+            required_hints = []
+            templates_dir = chart_root / "templates"
+            if templates_dir.exists():
+                for file_path in templates_dir.rglob("*.yaml"):
+                    try:
+                        content = file_path.read_text()
+                        for match in re.finditer(r'\.Values\.([A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)*)', content):
+                            discovered_keys.add(match.group(1))
+                        for line_num, line in enumerate(content.split('\n'), 1):
+                            if 'required "' in line and '.Values.' in line:
+                                msg_match = re.search(r'required\s+"([^"]+)"', line)
+                                val_match = re.search(r'\.Values\.([A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)*)', line)
+                                if msg_match and val_match:
+                                    required_hints.append({
+                                        "path": val_match.group(1),
+                                        "message": msg_match.group(1),
+                                        "source": {"file": str(file_path.relative_to(chart_root)), "line": line_num}
+                                    })
+                    except:
+                        continue
+            output.update({
+                "meta": {
+                    "repo": f"{owner}/{repo}",
+                    "ref": ref,
+                    "chartRoot": str(chart_root.relative_to(archive_root)),
+                    "chartName": chart_yaml.get("name", "unknown"),
+                    "version": chart_yaml.get("version")
+                },
+                "defaults": defaults,
+                "schema": schema,
+                "discoveredKeys": sorted(discovered_keys),
+                "requiredHints": sorted(required_hints, key=lambda x: x["source"]["file"]),
+                "docs": None
+            })
+            
+    except Exception as e:
+        output.update({"error": str(e), "defaults": {}, "schema": None, "discoveredKeys": [], "requiredHints": [], "docs": None})

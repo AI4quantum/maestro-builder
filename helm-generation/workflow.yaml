@@ -1,0 +1,18 @@
+
+apiVersion: maestro/v1alpha1
+kind: Workflow
+metadata:
+  name: helm-values-generation
+  labels:
+    app: helm-values-generation
+spec:
+  template:
+    metadata:
+      labels:
+        app: helm-values-generation
+    agents:
+      - helm-chart-ingestor
+    prompt: https://github.com/Qiskit/qiskit-serverless/tree/main/charts/qiskit-serverless
+    steps:
+      - name: step1
+        agent: helm-chart-ingestor
