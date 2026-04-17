@@ -1,3 +1,9 @@
+> ⚠️ **Archived Repository**
+>
+> This project is no longer maintained and has been archived as of April 2026.
+> - No new features or bug fixes will be accepted.
+
+
 # Maestro Builder
 
 A modern web-based interface for building Maestro agents and workflows using AI assistance.
